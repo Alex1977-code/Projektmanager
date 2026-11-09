@@ -12,16 +12,18 @@ import { InvoiceTable, useCreateInvoice } from '../components/Invoices';
 import { billingStatus } from '../utils/invoices';
 import { ProjectResourceGrid } from '../components/ResourceGrid';
 import { BulletBar, BulletLegend } from '../components/Charts';
+import { ProjectWorkPackages } from '../components/WorkPackages';
 import { phaseKey, phaseMetrics, projectMetrics, type ProjectMetrics } from '../utils/metrics';
 import { addDays, diffDays, fmtDate, relDays, startOfWeek, todayISO, weeksBetween } from '../utils/date';
 import { classNames, fmtEur, fmtEurCompact, fmtEurSigned, fmtHours, fmtNum, fmtPct, sum } from '../utils/format';
 import type { CostItem, Milestone, Phase, Project, Task, TaskStatus } from '../types';
 
-type Tab = 'uebersicht' | 'termine' | 'aufgaben' | 'ressourcen' | 'kosten' | 'rechnungen' | 'protokolle';
+type Tab = 'uebersicht' | 'termine' | 'aufgaben' | 'arbeitspakete' | 'ressourcen' | 'kosten' | 'rechnungen' | 'protokolle';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'uebersicht', label: 'Übersicht' },
   { id: 'termine', label: 'Terminplan' },
   { id: 'aufgaben', label: 'Aufgaben' },
+  { id: 'arbeitspakete', label: 'Arbeitspakete' },
   { id: 'ressourcen', label: 'Ressourcen' },
   { id: 'kosten', label: 'Kosten' },
   { id: 'rechnungen', label: 'Rechnungen' },
@@ -82,6 +84,7 @@ export function ProjectDetail() {
       {tab === 'uebersicht' && <Overview project={project} m={m} tasks={tasks} />}
       {tab === 'termine' && <Schedule project={project} />}
       {tab === 'aufgaben' && <ProjectTasks project={project} tasks={tasks} />}
+      {tab === 'arbeitspakete' && <ProjectWorkPackages project={project} />}
       {tab === 'ressourcen' && <ProjectResources project={project} />}
       {tab === 'kosten' && can('costs.view') && <ProjectCosts project={project} m={m} />}
       {tab === 'protokolle' && <ProjectProtocols project={project} />}

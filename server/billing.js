@@ -1,6 +1,7 @@
 // Abschlags- und Schlussrechnungen nach HOAI (§ 15) sowie Abwesenheiten.
 import { list, get, insert, update, remove, transaction, getSettings } from './core.js';
 import { ApiError } from './errors.js';
+import { nextNumber } from './offers.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -41,10 +42,7 @@ function recalcDrafts(db, projectId) {
 }
 
 function nextInvoiceNo(db, date) {
-  const year = (date || new Date().toISOString()).slice(0, 4);
-  const rows = list(db, 'invoices').filter((i) => String(i.invoiceNo || '').startsWith(`RE-${year}-`));
-  const max = rows.reduce((m, r) => Math.max(m, Number(String(r.invoiceNo).split('-')[2]) || 0), 0);
-  return `RE-${year}-${String(max + 1).padStart(3, '0')}`;
+  return nextNumber(getSettings(db).invoiceNoFormat || 'RE-{JJJJ}-{NNN}', date, list(db, 'invoices').map((i) => i.invoiceNo));
 }
 
 const FROZEN_EDITABLE = ['status', 'paidDate', 'paidAmount', 'note', 'dueDate'];

@@ -35,6 +35,8 @@ export const PERMISSION_GROUPS = [
     items: [
       ['costs.view', 'Kosten, Controlling und Stundensätze einsehen'],
       ['costs.edit', 'Fremdkosten erfassen'],
+      ['offers.view', 'Angebote und Arbeitspaket-Controlling einsehen'],
+      ['offers.edit', 'Angebote erstellen, versenden und beauftragen'],
       ['invoices.view', 'Rechnungen einsehen'],
       ['invoices.edit', 'Rechnungen erstellen, stellen und stornieren'],
     ],
@@ -56,11 +58,11 @@ export const DEFAULT_ROLES = [
   { key: 'admin', name: 'Administration', description: 'Alle Rechte. Kann nicht eingeschränkt werden.', permissions: ALL_PERMISSIONS, system: true },
   {
     key: 'leitung', name: 'Projektleitung', description: 'Steuert Projekte, Termine, Personal und Rechnungen.', system: true,
-    permissions: ['projects.edit', 'schedule.edit', 'tasks.edit', 'protocols.edit', 'resources.edit', 'absences.approve', 'absences.details', 'time.all', 'worktime.approve', 'costs.view', 'costs.edit', 'invoices.view', 'invoices.edit'],
+    permissions: ['projects.edit', 'schedule.edit', 'tasks.edit', 'protocols.edit', 'resources.edit', 'absences.approve', 'absences.details', 'time.all', 'worktime.approve', 'costs.view', 'costs.edit', 'offers.view', 'offers.edit', 'invoices.view', 'invoices.edit'],
   },
   {
     key: 'controlling', name: 'Controlling / Buchhaltung', description: 'Finanzen, Arbeitszeitfreigabe und Abacus-Übergabe.', system: false,
-    permissions: ['tasks.edit', 'protocols.edit', 'absences.approve', 'absences.details', 'time.all', 'worktime.approve', 'abacus.export', 'costs.view', 'costs.edit', 'invoices.view', 'invoices.edit'],
+    permissions: ['tasks.edit', 'protocols.edit', 'absences.approve', 'absences.details', 'time.all', 'worktime.approve', 'abacus.export', 'costs.view', 'costs.edit', 'offers.view', 'offers.edit', 'invoices.view', 'invoices.edit'],
   },
   { key: 'mitarbeiter', name: 'Mitarbeiter/in', description: 'Bearbeitet Aufgaben und Protokolle, erfasst eigene Zeiten.', system: true, permissions: ['tasks.edit', 'protocols.edit'] },
   { key: 'extern', name: 'Werkstudent/in / Extern', description: 'Sieht Projekte, erfasst nur eigene Zeiten.', system: false, permissions: [] },

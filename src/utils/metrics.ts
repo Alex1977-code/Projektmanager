@@ -1,5 +1,5 @@
 // Kennzahlen für Projektcontrolling (Earned-Value-Methode, vereinfachtes Modell).
-import type { CostItem, Data, Employee, ID, Invoice, Milestone, Phase, Project, Task } from '../types';
+import type { CostItem, Data, Employee, ID, Invoice, Milestone, Phase, Project, Task, WorkPackage } from '../types';
 import { buildCapacityIndex, type CapacityIndex } from './capacity';
 import { clamp, groupBy, sum } from './format';
 import { diffDays, todayISO } from './date';
@@ -19,6 +19,9 @@ export interface Index {
   actualByTask: Map<ID, number>;
   cap: CapacityIndex;
   invoicesByProject: Map<ID, Invoice[]>;
+  /** Ist-Stunden und -Kosten je Arbeitspaket */
+  actualByWp: Map<ID, { hours: number; cost: number }>;
+  wpByProject: Map<ID, WorkPackage[]>;
 }
 
 export const phaseKey = (projectId: ID, phaseId: ID | null | undefined) => `${projectId}:${phaseId ?? '-'}`;
@@ -50,6 +53,8 @@ export function buildIndex(data: Data): Index {
     actualByTask: new Map(data.summary.byTask.map((r) => [r.taskId, r.hours])),
     cap: buildCapacityIndex(data.absences, data.settings.state || 'HB'),
     invoicesByProject: groupBy([...data.invoices].sort((a, b) => a.number - b.number), (i) => i.projectId),
+    actualByWp: new Map((data.summary.byWorkPackage || []).map((r) => [r.workPackageId, { hours: r.hours, cost: r.cost }])),
+    wpByProject: groupBy([...(data.workPackages || [])].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)), (w) => w.projectId),
   };
 }
 

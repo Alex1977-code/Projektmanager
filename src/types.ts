@@ -142,6 +142,7 @@ export interface Task {
   dueDate: string | null;
   createdAt: string | null;
   sort: number | null;
+  workPackageId?: ID | null;
 }
 
 export interface Allocation {
@@ -158,6 +159,7 @@ export interface TimeEntry {
   projectId: ID;
   phaseId: ID | null;
   taskId: ID | null;
+  workPackageId?: ID | null;
   date: string;
   hours: number;
   note: string | null;
@@ -283,6 +285,108 @@ export interface Settings {
   vatPct: number;
   paymentDays: number;
   abacus: AbacusConfig;
+  companyPhone: string;
+  companyEmail: string;
+  companyWeb: string;
+  managingDirectors: string;
+  registerInfo: string;
+  taxNumber: string;
+  bankName: string;
+  skontoPct: number;
+  skontoDays: number;
+  invoiceNoFormat: string;
+  offerNoFormat: string;
+  invoiceIntro: string;
+  invoiceClosing: string;
+  offerIntro: string;
+  offerClosing: string;
+  offerValidDays: number;
+  offerRates: { label: string; rate: number }[];
+  docFrame: DocFrame;
+}
+
+/** Standardrahmen für Angebote und Rechnungen (Maße in mm) */
+export interface DocFrame {
+  mode: 'generated' | 'image';
+  accent: string;
+  topFirst: number;
+  topNext: number;
+  bottom: number;
+  left: number;
+  right: number;
+  foldMarks: boolean;
+}
+
+export interface Asset { id: ID; key: 'frameFirst' | 'frameNext' | 'logo'; name: string; mime: string; data: string; updatedAt: string }
+
+export type OfferStatus = 'entwurf' | 'versendet' | 'beauftragt' | 'abgelehnt';
+export const OFFER_STATUS_LABEL: Record<OfferStatus, string> = { entwurf: 'Entwurf', versendet: 'Versendet', beauftragt: 'Beauftragt', abgelehnt: 'Abgelehnt' };
+
+/** Angebotsposition = angebotene Leistung */
+export interface OfferPosition {
+  key: string;
+  title: string;
+  description: string;
+  phaseCode: string;
+  mode: 'pauschal' | 'aufwand';
+  hours: number;
+  rate: number;
+  amount: number;
+  optional: boolean;
+}
+
+export interface Offer {
+  id: ID;
+  projectId: ID;
+  offerNo: string | null;
+  revision: number;
+  title: string;
+  recipient: string;
+  contact: string;
+  date: string;
+  validUntil: string | null;
+  status: OfferStatus;
+  intro: string;
+  closing: string;
+  positions: OfferPosition[];
+  nkPct: number;
+  discountPct: number;
+  vatPct: number;
+  subtotal: number;
+  optionalTotal: number;
+  nk: number;
+  discount: number;
+  net: number;
+  vat: number;
+  gross: number;
+  hours: number;
+  sentAt: string | null;
+  decidedAt: string | null;
+  note: string | null;
+  createdBy: ID | null;
+}
+
+export const WP_STATUS = ['geplant', 'aktiv', 'abgeschlossen'] as const;
+export type WpStatus = (typeof WP_STATUS)[number];
+export const WP_STATUS_LABEL: Record<WpStatus, string> = { geplant: 'Geplant', aktiv: 'In Arbeit', abgeschlossen: 'Abgeschlossen' };
+
+export interface WorkPackage {
+  id: ID;
+  projectId: ID;
+  offerId: ID | null;
+  positionKey: string | null;
+  code: string;
+  title: string;
+  description: string | null;
+  phaseId: ID | null;
+  responsibleId: ID | null;
+  plannedHours: number;
+  budget: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: WpStatus;
+  progress: number;
+  sort: number;
 }
 
 export interface SessionUser {
@@ -304,6 +408,7 @@ export interface Summary {
   byPhase: SummaryRow[];
   byEmployee: SummaryRow[];
   byTask: { taskId: ID; hours: number }[];
+  byWorkPackage: { workPackageId: ID; hours: number; cost: number }[];
 }
 
 export interface Data {
@@ -318,11 +423,14 @@ export interface Data {
   protocols: Protocol[];
   absences: Absence[];
   invoices: Invoice[];
+  offers: Offer[];
+  workPackages: WorkPackage[];
+  assets: Asset[];
   roles: RoleDef[];
   worktimeMonths: WorktimeMonth[];
   me: { employeeId: ID | null; role: string; permissions: string[] };
   summary: Summary;
 }
 
-export type Collection = 'employees' | 'projects' | 'phases' | 'milestones' | 'tasks' | 'allocations' | 'costs' | 'protocols' | 'absences' | 'invoices' | 'roles' | 'worktimeMonths';
+export type Collection = 'employees' | 'projects' | 'phases' | 'milestones' | 'tasks' | 'allocations' | 'costs' | 'protocols' | 'absences' | 'invoices' | 'roles' | 'worktimeMonths' | 'offers' | 'workPackages';
 export type EntityOf<C extends Collection> = Data[C][number];

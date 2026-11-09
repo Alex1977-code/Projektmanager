@@ -22,6 +22,8 @@ import { Absences } from './pages/Absences';
 import { Invoices } from './pages/Invoices';
 import { InvoiceEditor } from './pages/InvoiceEditor';
 import { Worktime } from './pages/Worktime';
+import { Offers } from './pages/Offers';
+import { OfferEditor } from './pages/OfferEditor';
 import { Roles } from './pages/Roles';
 
 // Veröffentlichte Version: Browser-Backend mit gemeinsamer Datenbank (nur dort geladen)
@@ -57,6 +59,8 @@ export function App() {
                 <Route path="/abwesenheiten" element={<Absences />} />
                 <Route path="/rechnungen" element={<Invoices />} />
                 <Route path="/rechnungen/:id" element={<InvoiceEditor />} />
+                <Route path="/angebote" element={<Offers />} />
+                <Route path="/angebote/:id" element={<OfferEditor />} />
                 <Route path="/arbeitszeit" element={<Worktime />} />
                 <Route path="/rollen" element={<Roles />} />
                 <Route path="/team" element={<Team />} />

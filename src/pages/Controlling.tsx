@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { OfferControlling, RateControlling, WpControlling } from '../components/ControllingTools';
 import { ArrowDown, ArrowUp, Download } from 'lucide-react';
 import { useStore } from '../store';
 import { useToast } from '../components/Toast';
@@ -13,7 +14,7 @@ import type { Project } from '../types';
 
 type SortKey = 'number' | 'budget' | 'actualCost' | 'budgetUsed' | 'progress' | 'cpi' | 'eac' | 'variance';
 
-export function Controlling() {
+function ProjectControlling({ tabs }: { tabs: ReactNode }) {
   const { data, idx } = useStore();
   const toast = useToast();
   const navigate = useNavigate();
@@ -71,6 +72,7 @@ export function Controlling() {
     <div className="page">
       <PageHeader title="Kosten & Controlling" subtitle="Budget, Ist-Kosten und Prognose aller Projekte nach Earned-Value-Methode"
         actions={<button className="btn" onClick={exportCsv}><Download size={16} /> CSV-Export (Excel)</button>}>
+        {tabs}
         <div className="toolbar">
           <Segmented value={scope} onChange={setScope} options={[{ value: 'laufend', label: 'Laufende Projekte' }, { value: 'alle', label: 'inkl. abgeschlossene' }]} />
           <span className="spacer" />
@@ -147,6 +149,43 @@ export function Controlling() {
         <strong>Methodik:</strong> Ist-Kosten = gebuchte Stunden × Verrechnungssatz + angefallene Fremdkosten. Leistungswert (EV) = Budget × Fertigstellungsgrad
         (budgetgewichtet über die Leistungsphasen). CPI = EV / Ist-Kosten. Prognose (EAC) = Ist-Kosten + (Budget − EV) / CPI.
       </p>
+    </div>
+  );
+}
+
+type CtlTab = 'projekte' | 'arbeitspakete' | 'angebote' | 'kennzahlen';
+const CTL_SUB: Record<CtlTab, string> = {
+  projekte: 'Budget, Ist-Kosten und Prognose aller Projekte nach Earned-Value-Methode',
+  arbeitspakete: 'Nachkalkulation: angebotene Leistung gegen Ist und Prognose der Arbeitspakete',
+  angebote: 'Angebotsvolumen, Auftragsquote und Bindefristen',
+  kennzahlen: 'Erzielte Stundensätze je Projekt und Produktivität je Person',
+};
+
+/** Controlling mit Werkzeugen als Reiter. */
+export function Controlling() {
+  const { can } = useStore();
+  const [params, setParams] = useSearchParams();
+  const tabs: { id: CtlTab; label: string; show: boolean }[] = [
+    { id: 'projekte', label: 'Projekte', show: true },
+    { id: 'arbeitspakete', label: 'Arbeitspakete', show: true },
+    { id: 'angebote', label: 'Angebote', show: can('offers.view') },
+    { id: 'kennzahlen', label: 'Stundensätze & Produktivität', show: true },
+  ];
+  const tab = tabs.find((t) => t.id === params.get('tab') && t.show)?.id || 'projekte';
+  const nav = (
+    <nav className="tabs" role="tablist">
+      {tabs.filter((t) => t.show).map((t) => (
+        <button key={t.id} role="tab" aria-selected={tab === t.id} className={classNames('tab', tab === t.id && 'active')} onClick={() => setParams(t.id === 'projekte' ? {} : { tab: t.id }, { replace: true })}>{t.label}</button>
+      ))}
+    </nav>
+  );
+  if (tab === 'projekte') return <ProjectControlling tabs={nav} />;
+  return (
+    <div className="page">
+      <PageHeader title="Kosten & Controlling" subtitle={CTL_SUB[tab]}>{nav}</PageHeader>
+      {tab === 'arbeitspakete' && <WpControlling />}
+      {tab === 'angebote' && <OfferControlling />}
+      {tab === 'kennzahlen' && <RateControlling />}
     </div>
   );
 }

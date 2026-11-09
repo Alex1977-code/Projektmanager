@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, CalendarRange, ChevronDown, Clock, CornerDownLeft, FolderKanban, LayoutDashboard,
   ListChecks, LogOut, Menu, ShieldCheck, Timer, NotebookPen, Palmtree, Plus, Receipt, Search, Settings, Users, Gauge, X,
-  Eye,
+  Eye, FileSignature,
 } from 'lucide-react';
 import { useStore } from '../store';
 import { Avatar } from './ui';
@@ -25,6 +25,7 @@ const NAV = [
   { to: '/protokolle', label: 'Protokolle', icon: NotebookPen },
   { to: '/zeiten', label: 'Projektzeiten', icon: Clock },
   { to: '/arbeitszeit', label: 'Arbeitszeit', icon: Timer },
+  { to: '/angebote', label: 'Angebote', icon: FileSignature, perm: 'offers.view' },
   { to: '/controlling', label: 'Kosten & Controlling', icon: BarChart3, perm: 'costs.view' },
   { to: '/rechnungen', label: 'Rechnungen', icon: Receipt, perm: 'invoices.view' },
   { to: '/abwesenheiten', label: 'Abwesenheiten', icon: Palmtree },

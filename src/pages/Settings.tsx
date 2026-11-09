@@ -10,6 +10,7 @@ import { Card, EmptyState, Field, PageHeader } from '../components/ui';
 import { fmtNum } from '../utils/format';
 import { STATES } from '../../shared/holidays.js';
 import type { Settings as SettingsT } from '../types';
+import { MasterData } from '../components/MasterData';
 
 const MODE_TEXT: Record<string, string> = {
   none: 'Keine Anmeldung – Benutzerwahl im Browser (nur für Demo/Einzelplatz geeignet)',
@@ -27,7 +28,13 @@ export function Settings() {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    saveSettings({ ...s, hoursPerDay: numOf(s.hoursPerDay, 8), nkPct: numOf(s.nkPct, 0), vatPct: numOf(s.vatPct, 19), paymentDays: numOf(s.paymentDays, 30) });
+    const f = s.docFrame;
+    saveSettings({
+      ...s, hoursPerDay: numOf(s.hoursPerDay, 8), nkPct: numOf(s.nkPct, 0), vatPct: numOf(s.vatPct, 19), paymentDays: numOf(s.paymentDays, 30),
+      skontoPct: numOf(s.skontoPct, 0), skontoDays: numOf(s.skontoDays, 0), offerValidDays: numOf(s.offerValidDays, 60),
+      offerRates: (s.offerRates || []).filter((r) => r.label.trim()).map((r) => ({ label: r.label.trim(), rate: numOf(r.rate, 0) })),
+      docFrame: { ...f, topFirst: numOf(f.topFirst, 45), topNext: numOf(f.topNext, 28), bottom: numOf(f.bottom, 30), left: numOf(f.left, 25), right: numOf(f.right, 18) },
+    });
   };
   const exportAll = async () => {
     try {
@@ -47,27 +54,22 @@ export function Settings() {
 
   return (
     <div className="page page-narrow">
-      <PageHeader title="Einstellungen" subtitle="Büro-Stammdaten, Datensicherung und Systeminformationen" />
+      <PageHeader title="Einstellungen" subtitle="Büro- und Rechnungsstammdaten, Standardrahmen, Datensicherung" />
       <div className="stack">
-        <Card title="Büro">
-          <form className="form-grid" onSubmit={submit}>
-            <Field label="Name des Ingenieurbüros" span={2}><input value={s.companyName} onChange={(e) => set('companyName', e.target.value)} /></Field>
-            <Field label="Regelarbeitszeit pro Tag (h)"><input inputMode="decimal" value={String(s.hoursPerDay)} onChange={(e) => set('hoursPerDay', e.target.value as unknown as number)} /></Field>
-            <Field label="Bundesland (gesetzliche Feiertage)">
-              <select value={s.state} onChange={(e) => set('state', e.target.value)}>
-                {Object.entries(STATES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </Field>
-            <div className="field-span2 form-section">Rechnungsstellung</div>
-            <Field label="Anschrift (Briefkopf)" span={2}><textarea rows={2} value={s.companyAddress} onChange={(e) => set('companyAddress', e.target.value)} /></Field>
-            <Field label="Bankverbindung"><input value={s.bankDetails} onChange={(e) => set('bankDetails', e.target.value)} /></Field>
-            <Field label="USt-IdNr. / Steuernummer"><input value={s.taxId} onChange={(e) => set('taxId', e.target.value)} /></Field>
-            <Field label="Nebenkostenpauschale (Standard, %)"><input inputMode="decimal" value={String(s.nkPct)} onChange={(e) => set('nkPct', e.target.value as unknown as number)} /></Field>
-            <Field label="Umsatzsteuer (%)"><input inputMode="decimal" value={String(s.vatPct)} onChange={(e) => set('vatPct', e.target.value as unknown as number)} /></Field>
-            <Field label="Zahlungsziel (Tage)"><input inputMode="numeric" value={String(s.paymentDays)} onChange={(e) => set('paymentDays', e.target.value as unknown as number)} /></Field>
-            <div className="field form-actions"><button className="btn btn-primary" type="submit">Speichern</button></div>
-          </form>
-        </Card>
+        <form className="stack" onSubmit={submit}>
+          <Card title="Büro" actions={<button className="btn btn-primary" type="submit">Speichern</button>}>
+            <div className="form-grid">
+              <Field label="Name des Ingenieurbüros" span={2}><input value={s.companyName} onChange={(e) => set('companyName', e.target.value)} /></Field>
+              <Field label="Regelarbeitszeit pro Tag (h)"><input inputMode="decimal" value={String(s.hoursPerDay)} onChange={(e) => set('hoursPerDay', e.target.value as unknown as number)} /></Field>
+              <Field label="Bundesland (gesetzliche Feiertage)">
+                <select value={s.state} onChange={(e) => set('state', e.target.value)}>
+                  {Object.entries(STATES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </Field>
+            </div>
+          </Card>
+          {can('settings.edit') && <MasterData s={s} set={set} />}
+        </form>
 
         {IS_HOSTED && <HostedDataCard />}
 

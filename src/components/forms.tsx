@@ -203,6 +203,7 @@ export function TaskForm({ task, defaults, onClose }: { task?: Task; defaults?: 
     description: base.description ?? '',
     projectId: str(base.projectId ?? firstProject?.id),
     phaseId: str(base.phaseId),
+    workPackageId: str(base.workPackageId),
     assigneeId: str(base.assigneeId),
     status: (base.status ?? 'offen') as Task['status'],
     priority: (base.priority ?? 'mittel') as NonNullable<Task['priority']>,
@@ -211,6 +212,7 @@ export function TaskForm({ task, defaults, onClose }: { task?: Task; defaults?: 
     dueDate: base.dueDate ?? addDays(todayISO(), 14),
   });
   const phases = idx.phasesByProject.get(Number(v.projectId)) || [];
+  const wps = idx.wpByProject.get(Number(v.projectId)) || [];
   const booked = task ? idx.actualByTask.get(task.id) : undefined;
 
   const submit = async (e: FormEvent) => {
@@ -219,7 +221,7 @@ export function TaskForm({ task, defaults, onClose }: { task?: Task; defaults?: 
     if (!v.projectId) return toast.error('Bitte ein Projekt wählen');
     if (v.startDate && v.dueDate && v.dueDate < v.startDate) return toast.error('Fälligkeit liegt vor dem Beginn');
     const payload: Partial<Task> = {
-      ...v, projectId: Number(v.projectId), phaseId: v.phaseId ? Number(v.phaseId) : null,
+      ...v, projectId: Number(v.projectId), phaseId: v.phaseId ? Number(v.phaseId) : null, workPackageId: v.workPackageId ? Number(v.workPackageId) : null,
       assigneeId: v.assigneeId ? Number(v.assigneeId) : null, estimatedHours: num(v.estimatedHours),
       startDate: v.startDate || null, dueDate: v.dueDate || null,
     };
@@ -253,7 +255,7 @@ export function TaskForm({ task, defaults, onClose }: { task?: Task; defaults?: 
       <form id="entity-form" className="form-grid" onSubmit={submit}>
         <Field label="Titel *" span={2}><input value={v.title} onChange={(e) => set('title', e.target.value)} placeholder="z. B. Ermüdungsnachweis Torriegel" required /></Field>
         <Field label="Projekt *">
-          <select value={v.projectId} onChange={(e) => { set('projectId', e.target.value); set('phaseId', ''); }}>
+          <select value={v.projectId} onChange={(e) => { set('projectId', e.target.value); set('phaseId', ''); set('workPackageId', ''); }}>
             <option value="">– wählen –</option>
             {data.projects.filter((p) => p.status !== 'Abgeschlossen' || p.id === base.projectId).map((p) => <option key={p.id} value={p.id}>{p.number} · {p.name}</option>)}
           </select>
@@ -264,6 +266,14 @@ export function TaskForm({ task, defaults, onClose }: { task?: Task; defaults?: 
             {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.code} {ph.name}</option>)}
           </select>
         </Field>
+        {wps.length > 0 && (
+          <Field label="Arbeitspaket">
+            <select value={v.workPackageId} onChange={(e) => { set('workPackageId', e.target.value); const w = wps.find((x) => String(x.id) === e.target.value); if (w?.phaseId && !v.phaseId) set('phaseId', String(w.phaseId)); }}>
+              <option value="">– ohne –</option>
+              {wps.map((w) => <option key={w.id} value={w.id}>{w.code} {w.title}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="Zuständig">
           <select value={v.assigneeId} onChange={(e) => set('assigneeId', e.target.value)}>
             <option value="">– nicht zugewiesen –</option>

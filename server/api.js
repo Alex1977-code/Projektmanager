@@ -7,6 +7,7 @@ import {
 import { ApiError, ANONYMOUS_ADMIN } from './errors.js';
 import { handleAbsences, handleInvoices, maskAbsences } from './billing.js';
 import { abacusExport, assertMonthOpen, handleRoles, handleWorktimeMonths, handleWorktimes } from './worktime.js';
+import { handleAssets, handleOffers, handleWorkPackages } from './offers.js';
 import { ALL_PERMISSIONS, permissionsFor } from '../shared/permissions.js';
 
 /** Rechte des Benutzers (aus seiner Rolle, ohne Anmeldung: alle). */
@@ -17,7 +18,7 @@ export function permissionSet(db, user) {
 
 export { ApiError };
 
-const BOOTSTRAP_TABLES = ['employees', 'projects', 'phases', 'milestones', 'tasks', 'allocations', 'costs', 'protocols', 'absences'];
+const BOOTSTRAP_TABLES = ['employees', 'projects', 'phases', 'milestones', 'tasks', 'allocations', 'costs', 'protocols', 'absences', 'workPackages', 'assets'];
 
 /** Ist-Stunden und Ist-Personalkosten (Stunden × Verrechnungssatz). */
 export function summary(db) {
@@ -38,6 +39,12 @@ export function summary(db) {
     byPhase: group((t) => `${t.projectId}|${t.phaseId}`, (t) => ({ projectId: t.projectId, phaseId: t.phaseId })),
     byEmployee: group((t) => `${t.projectId}|${t.employeeId}`, (t) => ({ projectId: t.projectId, employeeId: t.employeeId })),
     byTask: group((t) => (t.taskId ? String(t.taskId) : null), (t) => ({ taskId: t.taskId })).map(({ taskId, hours }) => ({ taskId, hours })),
+    // Arbeitspaket: direkt gebucht oder über eine Aufgabe des Arbeitspakets
+    byWorkPackage: (() => {
+      const wpOfTask = new Map(list(db, 'tasks').filter((t) => t.workPackageId).map((t) => [t.id, t.workPackageId]));
+      const wp = (t) => t.workPackageId || (t.taskId ? wpOfTask.get(t.taskId) : null) || null;
+      return group((t) => (wp(t) ? String(wp(t)) : null), (t) => ({ workPackageId: wp(t) }));
+    })(),
   };
 }
 
@@ -70,12 +77,12 @@ function cascadeDelete(db, table, id) {
         if (list(db, 'invoices', { projectId: id }).some((i) => i.status !== 'entwurf')) {
           throw new ApiError(409, 'Für dieses Projekt wurden bereits Rechnungen gestellt. Bitte den Status auf „Abgeschlossen“ setzen statt zu löschen.');
         }
-        for (const t of ['invoices', 'phases', 'milestones', 'tasks', 'allocations', 'timeEntries', 'costs', 'protocols']) {
+        for (const t of ['invoices', 'offers', 'workPackages', 'phases', 'milestones', 'tasks', 'allocations', 'timeEntries', 'costs', 'protocols']) {
           removeWhere(db, t, (r) => r.projectId === id);
         }
         break;
       case 'phases':
-        for (const t of ['tasks', 'timeEntries', 'costs']) updateWhere(db, t, (r) => r.phaseId === id, { phaseId: null });
+        for (const t of ['tasks', 'timeEntries', 'costs', 'workPackages']) updateWhere(db, t, (r) => r.phaseId === id, { phaseId: null });
         break;
       case 'tasks':
         updateWhere(db, 'timeEntries', (r) => r.taskId === id, { taskId: null });
@@ -117,20 +124,21 @@ function setAllocation(db, body) {
 function setTimeEntry(db, body) {
   const { employeeId, projectId, date } = body || {};
   const phaseId = body?.phaseId ?? null;
+  const wpId = body?.workPackageId ? Number(body.workPackageId) : null;
   const hours = Number(body?.hours) || 0;
   validate('timeEntries', { employeeId, projectId, date, hours: hours || 1 }, false);
   if (hours < 0 || hours > 24) throw new ApiError(400, 'Stunden müssen zwischen 0 und 24 liegen');
   return transaction(db, () => {
     const pid = phaseId === null || phaseId === undefined || phaseId === '' ? null : Number(phaseId);
     const rows = list(db, 'timeEntries', { employeeId: Number(employeeId), projectId: Number(projectId), date })
-      .filter((r) => (r.phaseId ?? null) === pid);
+      .filter((r) => (r.phaseId ?? null) === pid && (r.workPackageId ?? null) === wpId);
     for (const r of rows.slice(1)) remove(db, 'timeEntries', r.id);
     if (hours === 0) {
       if (rows[0]) remove(db, 'timeEntries', rows[0].id);
       return { deleted: true };
     }
     if (rows[0]) return update(db, 'timeEntries', rows[0].id, { hours, note: body.note });
-    return insert(db, 'timeEntries', { employeeId, projectId, phaseId, date, hours, note: body.note });
+    return insert(db, 'timeEntries', { employeeId, projectId, phaseId, workPackageId: wpId, date, hours, note: body.note });
   });
 }
 
@@ -186,6 +194,7 @@ export function handle(db, method, pathname, query = {}, body, user = ANONYMOUS_
     const out = { settings: getSettings(db) };
     for (const t of BOOTSTRAP_TABLES) out[t] = list(db, t);
     out.invoices = can('invoices.view') ? list(db, 'invoices') : [];
+    out.offers = can('offers.view') ? list(db, 'offers') : [];
     out.absences = maskAbsences(out.absences, user, can('absences.details'));
     out.roles = list(db, 'roles').sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
     out.worktimeMonths = handleWorktimeMonths(db, 'GET', null, {}, null, user, can);
@@ -193,13 +202,17 @@ export function handle(db, method, pathname, query = {}, body, user = ANONYMOUS_
     if (!can('costs.view')) {
       // Stundensätze und Personalkosten nur mit Kostenrecht
       out.employees = out.employees.map((e) => ({ ...e, hourlyRate: null }));
-      for (const k of ['byPhase', 'byEmployee']) out.summary[k] = out.summary[k].map((r) => ({ ...r, cost: 0 }));
+      for (const k of ['byPhase', 'byEmployee', 'byWorkPackage']) out.summary[k] = out.summary[k].map((r) => ({ ...r, cost: 0 }));
+      out.workPackages = out.workPackages.map((w) => ({ ...w, budget: null }));
     }
     out.me = { employeeId: user.employeeId ?? null, role: user.role, permissions: [...perms] };
     return out;
   }
 
   if (resource === 'invoices') return handleInvoices(db, method, idOrAction ? Number(idOrAction) : null, body, user, validate, can);
+  if (resource === 'offers') return handleOffers(db, method, idOrAction, body, user, validate, can);
+  if (resource === 'workPackages') return handleWorkPackages(db, method, idOrAction ? Number(idOrAction) : null, query, body, validate, can);
+  if (resource === 'assets') return handleAssets(db, method, idOrAction, body, can);
   if (resource === 'absences') return handleAbsences(db, method, idOrAction ? Number(idOrAction) : null, body, user, validate, can);
   if (resource === 'worktimes') return handleWorktimes(db, method, idOrAction, query, body, user, can);
   if (resource === 'worktimeMonths') return handleWorktimeMonths(db, method, idOrAction, query, body, user, can);

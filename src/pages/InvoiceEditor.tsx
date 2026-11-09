@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast';
 import { Modal, useConfirm } from '../components/Modal';
 import { Card, EmptyState, Field } from '../components/ui';
 import { InvoiceStatusBadge } from '../components/Invoices';
+import { DocFrame } from '../components/DocFrame';
 import type { Invoice, InvoiceLine } from '../types';
 import { addDays, fmtDate, todayISO } from '../utils/date';
 import { classNames, fmtEur, fmtNum } from '../utils/format';
@@ -114,6 +115,8 @@ export function InvoiceEditor() {
   const addExtra = () => change({ lines: [...draft.lines, { key: `x${Date.now().toString(36)}`, phaseId: null, label: 'Besondere Leistung / Nachtrag', fee: 0, percent: 0 }] });
 
   const title = draft.type === 'Abschlagsrechnung' ? `${draft.number}. Abschlagsrechnung` : `${draft.type} (Nr. ${draft.number})`;
+  // Platzhalter der Standardtexte aus den Rechnungsstammdaten
+  const fill = (t: string) => (t || '').replace(/\{leistungsstand\}/g, fmtDate(draft.periodEnd)).replace(/\{faellig\}/g, fmtDate(draft.dueDate || addDays(draft.date, settings.paymentDays || 30))).replace(/\{rechnungsnummer\}/g, draft.invoiceNo || '');
 
   return (
     <div className="page">
@@ -133,7 +136,7 @@ export function InvoiceEditor() {
           </div>
           <div className="page-actions">
             {editable && <button className="icon-btn" onClick={del} title="Entwurf löschen" aria-label="Entwurf löschen"><Trash2 size={17} /></button>}
-            <button className="btn" onClick={() => { save(); printOrSave('.invoice-print', `Rechnung-${draft.invoiceNo || 'Entwurf'}`, `${title} ${draft.invoiceNo || ''}`).catch((e) => toast.error((e as Error).message)); }}><Printer size={16} /> {PRINT_LABEL}</button>
+            <button className="btn" onClick={() => { save(); printOrSave('.invoice-print', `Rechnung-${draft.invoiceNo || 'Entwurf'}`, `${title} ${draft.invoiceNo || ''}`, true).catch((e) => toast.error((e as Error).message)); }}><Printer size={16} /> {PRINT_LABEL}</button>
             {editable && <button className="btn btn-primary" onClick={issue}><Send size={16} /> Rechnung stellen</button>}
             {draft.status === 'gestellt' && <button className="btn" onClick={cancel}><Undo2 size={16} /> Stornieren</button>}
             {draft.status === 'gestellt' && <button className="btn btn-primary" onClick={() => setPayment(true)}><Banknote size={16} /> Zahlungseingang</button>}
@@ -225,51 +228,46 @@ export function InvoiceEditor() {
       </div>
 
       {/* ------------------------------------------------------------ Druckfassung */}
-      <article className="print-only invoice-print">
-        <div className="ip-sender">{settings.companyName} · {settings.companyAddress.replace(/\n/g, ' · ')}</div>
-        <div className="ip-top">
-          <div className="ip-recipient">
-            <strong>{project?.client}</strong>
-            <div>Projekt: {project?.name}</div>
-            {project?.location && <div>{project.location}</div>}
-          </div>
-          <table className="ip-meta">
+      <DocFrame className="invoice-print" docLabel={`${title} ${draft.invoiceNo || ''}`.trim()}>
+        <div className="dp-sender">{settings.companyName} · {settings.companyAddress.replace(/\n/g, ' · ')}</div>
+        <div className="dp-top">
+          <div className="dp-recipient"><strong>{project?.client}</strong>{project?.location ? `\n${project.location}` : ''}</div>
+          <table className="dp-meta">
             <tbody>
               <tr><th>Rechnungsnummer</th><td>{draft.invoiceNo || 'ENTWURF'}</td></tr>
               <tr><th>Rechnungsdatum</th><td>{fmtDate(draft.date)}</td></tr>
               <tr><th>Projektnummer</th><td>{project?.number}</td></tr>
               <tr><th>Leistungsstand per</th><td>{fmtDate(draft.periodEnd)}</td></tr>
-              <tr><th>{settings.taxId.split(' ')[0]}</th><td>{settings.taxId.split(' ').slice(1).join(' ')}</td></tr>
+              {settings.taxId && <tr><th>{settings.taxId.split(' ')[0]}</th><td>{settings.taxId.split(' ').slice(1).join(' ')}</td></tr>}
             </tbody>
           </table>
         </div>
         <h2>{title} gemäß § 15 HOAI</h2>
-        <p>Für die bis zum {fmtDate(draft.periodEnd)} erbrachten Leistungen im o. g. Projekt berechnen wir gemäß Ingenieurvertrag:</p>
-        <table className="pp-table ip-lines">
+        <p><strong>Projekt: {project?.name}</strong></p>
+        <p className="pre">{fill(settings.invoiceIntro)}</p>
+        <table className="dp-lines">
           <thead><tr><th>Leistung</th><th className="r">Honorar netto</th><th className="r">Leistungsstand</th><th className="r">Leistung kumuliert</th></tr></thead>
           <tbody>
             {calc.lines.map((l) => (
               <tr key={l.key}><td>{l.label}</td><td className="r">{money(l.fee)}</td><td className="r">{fmtNum(l.percent, 1)} %</td><td className="r">{money(l.amount ?? 0)}</td></tr>
             ))}
-            <tr className="ip-sub"><td colSpan={3}>Summe Leistung</td><td className="r">{money(calc.performance)}</td></tr>
+          </tbody>
+          <tbody className="dp-sums">
+            <tr className="dp-sub"><td colSpan={3}>Summe Leistung</td><td className="r">{money(calc.performance)}</td></tr>
             <tr><td colSpan={3}>zzgl. Nebenkostenpauschale {fmtNum(draft.nkPct, 1)} %</td><td className="r">{money(calc.nk)}</td></tr>
-            <tr className="ip-sub"><td colSpan={3}>Gesamtleistung netto</td><td className="r">{money(calc.cumulative)}</td></tr>
+            <tr className="dp-sub"><td colSpan={3}>Gesamtleistung netto</td><td className="r">{money(calc.cumulative)}</td></tr>
             {prevList.map((p) => (
               <tr key={p.id}><td colSpan={3}>abzgl. {p.number}. Abschlag, Rechnung {p.invoiceNo} vom {fmtDate(p.date)}</td><td className="r">{money(-p.net)}</td></tr>
             ))}
-            <tr className="ip-sub"><td colSpan={3}>Rechnungsbetrag netto</td><td className="r">{money(calc.net)}</td></tr>
+            <tr className="dp-sub"><td colSpan={3}>Rechnungsbetrag netto</td><td className="r">{money(calc.net)}</td></tr>
             <tr><td colSpan={3}>zzgl. Umsatzsteuer {fmtNum(draft.vatPct)} %</td><td className="r">{money(calc.vat)}</td></tr>
-            <tr className="ip-total"><td colSpan={3}>Rechnungsbetrag brutto</td><td className="r">{money(calc.gross)}</td></tr>
+            <tr className="dp-total"><td colSpan={3}>Rechnungsbetrag brutto</td><td className="r">{money(calc.gross)}</td></tr>
           </tbody>
         </table>
         {draft.note && <p className="pre">{draft.note}</p>}
-        <p>Bitte überweisen Sie den Rechnungsbetrag bis zum <strong>{fmtDate(draft.dueDate || addDays(draft.date, settings.paymentDays || 30))}</strong> ohne Abzug unter Angabe der Rechnungsnummer.</p>
-        <footer className="ip-footer">
-          <div>{settings.companyName}<br />{settings.companyAddress.split('\n').map((l, i) => <span key={i}>{l}<br /></span>)}</div>
-          <div>Bankverbindung<br />{settings.bankDetails}</div>
-          <div>{settings.taxId}</div>
-        </footer>
-      </article>
+        <p className="pre">{fill(settings.invoiceClosing)}</p>
+        {settings.skontoPct > 0 && settings.skontoDays > 0 && <p>Bei Zahlung innerhalb von {settings.skontoDays} Tagen gewähren wir {fmtNum(settings.skontoPct, 1)} % Skonto ({money(calc.gross * (1 - settings.skontoPct / 100))}).</p>}
+      </DocFrame>
 
       {payment && <PaymentDialog invoice={draft} onClose={() => setPayment(false)} />}
     </div>

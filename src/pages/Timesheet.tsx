@@ -11,8 +11,8 @@ import { addDays, fmtDate, fmtDateShort, isoWeek, startOfWeek, todayISO, weekday
 import { classNames, fmtNum, sum } from '../utils/format';
 import { dayOff } from '../utils/capacity';
 
-interface Row { key: string; projectId: ID; phaseId: ID | null; planned?: number }
-const rowKey = (projectId: ID, phaseId: ID | null) => `${projectId}:${phaseId ?? '-'}`;
+interface Row { key: string; projectId: ID; phaseId: ID | null; wpId: ID | null; planned?: number }
+const rowKey = (projectId: ID, phaseId: ID | null, wpId: ID | null = null) => `${projectId}:${phaseId ?? '-'}:${wpId ?? '-'}`;
 
 function DayInput({ value, onCommit, label, weekend }: { value: number; onCommit: (v: number) => void; label: string; weekend?: boolean }) {
   const fmt = (v: number) => (v ? fmtNum(v, 2) : '');
@@ -77,29 +77,30 @@ export function Timesheet() {
   // Zeilen: gebuchte Kombinationen + geplante Projekte der Woche + manuell hinzugefügte
   const rows = useMemo(() => {
     const map = new Map<string, Row>();
-    for (const e of entries) map.set(rowKey(e.projectId, e.phaseId), { key: rowKey(e.projectId, e.phaseId), projectId: e.projectId, phaseId: e.phaseId });
+    for (const e of entries) { const wpId = e.workPackageId ?? null; map.set(rowKey(e.projectId, e.phaseId, wpId), { key: rowKey(e.projectId, e.phaseId, wpId), projectId: e.projectId, phaseId: e.phaseId, wpId }); }
     const planned = data.allocations.filter((a) => a.employeeId === empId && a.weekStart === week);
     for (const a of planned) {
       const existing = [...map.values()].find((r) => r.projectId === a.projectId);
       if (existing) existing.planned = a.hours;
       else {
         const phaseId = activePhaseOf(a.projectId);
-        map.set(rowKey(a.projectId, phaseId), { key: rowKey(a.projectId, phaseId), projectId: a.projectId, phaseId, planned: a.hours });
+        map.set(rowKey(a.projectId, phaseId), { key: rowKey(a.projectId, phaseId), projectId: a.projectId, phaseId, wpId: null, planned: a.hours });
       }
     }
     for (const r of extra) if (!map.has(r.key)) map.set(r.key, r);
     return [...map.values()].sort((a, b) => (idx.projectById.get(a.projectId)?.number || '').localeCompare(idx.projectById.get(b.projectId)?.number || ''));
   }, [entries, data.allocations, empId, week, extra, idx]);
 
-  const cell = (r: Row, d: string) => sum(entries.filter((e) => e.projectId === r.projectId && (e.phaseId ?? null) === r.phaseId && e.date === d), (e) => e.hours);
+  const same = (e: TimeEntry, r: Row) => e.projectId === r.projectId && (e.phaseId ?? null) === r.phaseId && (e.workPackageId ?? null) === r.wpId;
+  const cell = (r: Row, d: string) => sum(entries.filter((e) => same(e, r) && e.date === d), (e) => e.hours);
 
   const commit = async (r: Row, date: string, hours: number) => {
     if (!empId) return;
     try {
-      await api.post('/api/timeEntries/set', { employeeId: empId, projectId: r.projectId, phaseId: r.phaseId, date, hours });
+      await api.post('/api/timeEntries/set', { employeeId: empId, projectId: r.projectId, phaseId: r.phaseId, workPackageId: r.wpId, date, hours });
       setEntries((list) => {
-        const rest = list.filter((e) => !(e.projectId === r.projectId && (e.phaseId ?? null) === r.phaseId && e.date === date));
-        return hours > 0 ? [...rest, { id: -Date.now(), employeeId: empId, projectId: r.projectId, phaseId: r.phaseId, taskId: null, date, hours, note: '' }] : rest;
+        const rest = list.filter((e) => !(same(e, r) && e.date === date));
+        return hours > 0 ? [...rest, { id: -Date.now(), employeeId: empId, projectId: r.projectId, phaseId: r.phaseId, workPackageId: r.wpId, taskId: null, date, hours, note: '' }] : rest;
       });
       window.clearTimeout(refreshTimer.current);
       refreshTimer.current = window.setTimeout(() => refreshSummary(), 800);
@@ -169,6 +170,8 @@ export function Timesheet() {
                 const p = idx.projectById.get(r.projectId);
                 const phases = idx.phasesByProject.get(r.projectId) || [];
                 const ph = r.phaseId ? idx.phaseById.get(r.phaseId) : null;
+                const wps = idx.wpByProject.get(r.projectId) || [];
+                const wp = r.wpId ? wps.find((w) => w.id === r.wpId) : null;
                 const rowSum = sum(days, (d) => cell(r, d));
                 const hasHours = rowSum > 0;
                 return (
@@ -179,15 +182,23 @@ export function Timesheet() {
                         <div>
                           <strong>{p?.number} · {p?.name}</strong>
                           {hasHours ? (
-                            <small>{ph ? `${ph.code} ${ph.name}` : 'ohne Phase'}</small>
+                            <small>{wp ? <><span className="ts-wp">{wp.code}</span> {wp.title}</> : ph ? `${ph.code} ${ph.name}` : 'ohne Phase'}</small>
                           ) : (
-                            <select className="ts-phase-select" value={r.phaseId ?? ''} aria-label="Leistungsphase"
+                            <select className="ts-phase-select" value={r.wpId ? `w${r.wpId}` : r.phaseId ?? ''} aria-label="Leistungsphase oder Arbeitspaket"
                               onChange={(e) => {
-                                const phaseId = e.target.value ? Number(e.target.value) : null;
-                                setExtra((x) => [...x.filter((y) => y.key !== r.key), { key: rowKey(r.projectId, phaseId), projectId: r.projectId, phaseId, planned: r.planned }]);
+                                const val = e.target.value;
+                                const w = val.startsWith('w') ? wps.find((x) => x.id === Number(val.slice(1))) : null;
+                                const phaseId = w ? w.phaseId ?? null : val ? Number(val) : null;
+                                const wpId = w ? w.id : null;
+                                setExtra((x) => [...x.filter((y) => y.key !== r.key), { key: rowKey(r.projectId, phaseId, wpId), projectId: r.projectId, phaseId, wpId, planned: r.planned }]);
                               }}>
                               <option value="">ohne Phase</option>
-                              {phases.map((x) => <option key={x.id} value={x.id}>{x.code} {x.name}</option>)}
+                              {wps.length > 0 ? (
+                                <>
+                                  <optgroup label="Arbeitspakete">{wps.filter((w) => w.status !== 'abgeschlossen' || w.id === r.wpId).map((w) => <option key={w.id} value={`w${w.id}`}>{w.code} {w.title}</option>)}</optgroup>
+                                  <optgroup label="Leistungsphasen">{phases.map((x) => <option key={x.id} value={x.id}>{x.code} {x.name}</option>)}</optgroup>
+                                </>
+                              ) : phases.map((x) => <option key={x.id} value={x.id}>{x.code} {x.name}</option>)}
                             </select>
                           )}
                         </div>
@@ -211,8 +222,12 @@ export function Timesheet() {
                       const pid = Number(e.target.value);
                       setAddProject('');
                       if (!pid) return;
-                      const phaseId = activePhaseOf(pid);
-                      setExtra((x) => [...x, { key: rowKey(pid, phaseId), projectId: pid, phaseId }]);
+                      // erste noch freie Kombination: aktive Phase, sonst weitere Phasen, sonst „ohne Phase“
+                      const taken = new Set(rows.map((r) => r.key));
+                      const options = [activePhaseOf(pid), ...(idx.phasesByProject.get(pid) || []).map((ph) => ph.id), null];
+                      const phaseId = options.find((ph) => !taken.has(rowKey(pid, ph))) ?? null;
+                      if (taken.has(rowKey(pid, phaseId))) { toast.info('Für dieses Projekt sind bereits alle Zeilen vorhanden.'); return; }
+                      setExtra((x) => [...x, { key: rowKey(pid, phaseId), projectId: pid, phaseId, wpId: null }]);
                     }}>
                       <option value="">Projekt hinzufügen …</option>
                       {bookable.map((p) => <option key={p.id} value={p.id}>{p.number} · {p.name}</option>)}

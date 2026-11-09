@@ -1,9 +1,9 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { AlertOctagon, AlertTriangle, CheckCircle2, MinusCircle } from 'lucide-react';
 import type { Employee, Priority, ProjectStatus, TaskStatus } from '../types';
 import { TASK_STATUS_LABEL } from '../types';
 import { AMPEL_LABEL, type Ampel } from '../utils/metrics';
-import { classNames, clamp, initials } from '../utils/format';
+import { classNames, clamp, fmtNum, initials } from '../utils/format';
 
 export function Avatar({ employee, size = 28, title }: { employee?: Employee | null; size?: number; title?: string }) {
   if (!employee) {
@@ -158,5 +158,22 @@ export function PageHeader({ title, subtitle, actions, children }: { title: Reac
       </div>
       {children}
     </div>
+  );
+}
+
+/** Zahleneingabe mit deutschem Format (1.234,50); übernimmt beim Verlassen des Feldes. */
+export function NumInput({ value, onChange, disabled, suffix, width = 90, digits = 2, label }: { value: number; onChange: (v: number) => void; disabled?: boolean; suffix?: string; width?: number | string; digits?: number; label?: string }) {
+  const [text, setText] = useState(fmtNum(value, digits));
+  useEffect(() => setText(fmtNum(value, digits)), [value, digits]);
+  const commit = () => {
+    const n = Number(text.replace(/\./g, '').replace(',', '.'));
+    if (Number.isFinite(n)) { if (n !== value) onChange(n); else setText(fmtNum(value, digits)); } else setText(fmtNum(value, digits));
+  };
+  return (
+    <span className="num-input" style={{ width }}>
+      <input value={text} disabled={disabled} inputMode="decimal" aria-label={label} onChange={(e) => setText(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} onFocus={(e) => e.target.select()} />
+      {suffix && <span>{suffix}</span>}
+    </span>
   );
 }

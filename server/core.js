@@ -30,12 +30,12 @@ export const SCHEMA = {
   tasks: {
     projectId: 'int', phaseId: 'int', title: 'text', description: 'text', assigneeId: 'int',
     status: 'text', priority: 'text', estimatedHours: 'real', startDate: 'text',
-    dueDate: 'text', createdAt: 'text', sort: 'real',
+    dueDate: 'text', createdAt: 'text', sort: 'real', workPackageId: 'int',
   },
   allocations: { employeeId: 'int', projectId: 'int', weekStart: 'text', hours: 'real' },
   timeEntries: {
     employeeId: 'int', projectId: 'int', phaseId: 'int', taskId: 'int',
-    date: 'text', hours: 'real', note: 'text', exportedAt: 'text',
+    date: 'text', hours: 'real', note: 'text', exportedAt: 'text', workPackageId: 'int',
   },
   costs: {
     projectId: 'int', phaseId: 'int', date: 'text', category: 'text',
@@ -65,6 +65,22 @@ export const SCHEMA = {
     exportedAt: 'text', note: 'text',
   },
   abacusExports: { type: 'text', period: 'text', createdAt: 'text', createdBy: 'int', count: 'int', hours: 'real', filename: 'text' },
+  /** Angebote: Positionen = angebotene Leistungen (pauschal oder nach Aufwand) */
+  offers: {
+    projectId: 'int', offerNo: 'text', revision: 'int', title: 'text', recipient: 'text', contact: 'text',
+    date: 'text', validUntil: 'text', status: 'text', intro: 'text', closing: 'text', positions: 'json',
+    nkPct: 'real', discountPct: 'real', vatPct: 'real', subtotal: 'real', optionalTotal: 'real', nk: 'real',
+    discount: 'real', net: 'real', vat: 'real', gross: 'real', hours: 'real',
+    sentAt: 'text', decidedAt: 'text', note: 'text', createdBy: 'int',
+  },
+  /** Arbeitspakete, optional einer Angebotsposition zugeordnet (offerId + positionKey) */
+  workPackages: {
+    projectId: 'int', offerId: 'int', positionKey: 'text', code: 'text', title: 'text', description: 'text',
+    phaseId: 'int', responsibleId: 'int', plannedHours: 'real', budget: 'real', startDate: 'text', endDate: 'text',
+    status: 'text', progress: 'real', sort: 'real',
+  },
+  /** Dateien für Druckvorlagen (Briefbogen erste Seite / Folgeseiten) als Data-URL */
+  assets: { key: 'text', name: 'text', mime: 'text', data: 'text', updatedAt: 'text' },
 };
 
 /** Pflichtfelder je Tabelle (für POST). */
@@ -84,6 +100,9 @@ export const REQUIRED = {
   worktimes: ['employeeId', 'date'],
   worktimeMonths: ['employeeId', 'month'],
   abacusExports: ['type', 'period'],
+  offers: ['projectId', 'date'],
+  workPackages: ['projectId', 'title'],
+  assets: ['key', 'data'],
 };
 
 
@@ -187,6 +206,40 @@ export const DEFAULT_SETTINGS = {
   nkPct: 5,
   vatPct: 19,
   paymentDays: 30,
+  /** Rechnungsstammdaten */
+  companyPhone: '',
+  companyEmail: '',
+  companyWeb: '',
+  managingDirectors: '',
+  registerInfo: '',
+  taxNumber: '',
+  bankName: '',
+  skontoPct: 0,
+  skontoDays: 0,
+  /** Nummernkreise: {JJJJ} Jahr, {JJ} Jahr zweistellig, {NNN} laufende Nummer je Jahr (Anzahl N = Stellen) */
+  invoiceNoFormat: 'RE-{JJJJ}-{NNN}',
+  offerNoFormat: 'AN-{JJJJ}-{NNN}',
+  invoiceIntro: 'Für die bis zum {leistungsstand} erbrachten Leistungen im o. g. Projekt berechnen wir gemäß Ingenieurvertrag:',
+  invoiceClosing: 'Bitte überweisen Sie den Rechnungsbetrag bis zum {faellig} ohne Abzug unter Angabe der Rechnungsnummer.',
+  offerIntro: 'Sehr geehrte Damen und Herren,\n\nvielen Dank für Ihre Anfrage. Für die nachfolgend beschriebenen Ingenieurleistungen unterbreiten wir Ihnen folgendes Angebot:',
+  offerClosing: 'Die Abrechnung erfolgt nach Leistungsfortschritt durch Abschlagsrechnungen. Es gelten die Regelungen der HOAI in der jeweils gültigen Fassung. An dieses Angebot halten wir uns bis zum {gueltig} gebunden.\n\nFür Rückfragen stehen wir Ihnen gern zur Verfügung.\n\nMit freundlichen Grüßen',
+  offerValidDays: 60,
+  /** Stundensätze für die Angebotskalkulation (Positionen nach Aufwand) */
+  offerRates: [
+    { label: 'Projektleitung', rate: 135 },
+    { label: 'Ingenieur/in', rate: 115 },
+    { label: 'Konstrukteur/in', rate: 95 },
+    { label: 'Techn. Zeichner/in', rate: 78 },
+  ],
+  /** Standardrahmen für Angebote und Rechnungen (Maße in mm). Bilder liegen in der Tabelle „assets“. */
+  docFrame: {
+    mode: 'generated', // 'generated' = Kopf/Fuß aus den Stammdaten, 'image' = eigener Briefbogen
+    accent: '#0b1f3a',
+    topFirst: 45, topNext: 28, bottom: 30, left: 25, right: 18,
+    foldMarks: true,
+  },
+  /** interne Stufe für einmalige Datenanpassungen */
+  dataLevel: 0,
   /** Abacus-Schnittstelle (Export-Datei für den Import in Abacus) */
   abacus: {
     mandant: '',

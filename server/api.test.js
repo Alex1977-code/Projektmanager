@@ -381,3 +381,80 @@ test('Rechteausweitung: Mitarbeiterdaten-Recht erlaubt keine Rollenzuweisung', (
   assert.throws(() => handle(db, 'PUT', `/api/employees/${e.id}`, {}, { appRole: 'admin' }, u), (x) => x.status === 403);
   assert.throws(() => handle(db, 'POST', '/api/employees', {}, { name: 'X', appRole: 'admin' }, u), (x) => x.status === 403);
 });
+
+// ---------------------------------------------------------------- Angebote & Arbeitspakete
+test('Angebot: Summen, Nummernkreis, Festschreibung, Beauftragung erzeugt Arbeitspakete', () => {
+  const db = fresh();
+  const p = handle(db, 'POST', '/api/projects', {}, { name: 'Wehr', status: 'Akquise', budget: 0 });
+  const ph = handle(db, 'POST', '/api/phases', {}, { projectId: p.id, code: 'LPH 3', name: 'Entwurf', startDate: '2026-01-01', endDate: '2026-06-30' });
+  const positions = [
+    { key: 'a', title: 'LPH 3 Entwurfsplanung', phaseCode: 'LPH 3', mode: 'pauschal', amount: 40000, hours: 380 },
+    { key: 'b', title: 'Vermessung', mode: 'aufwand', hours: 20, rate: 110 },
+    { key: 'c', title: 'Zusatztermine', mode: 'aufwand', hours: 8, rate: 125, optional: true },
+  ];
+  const o = handle(db, 'POST', '/api/offers', {}, { projectId: p.id, date: '2026-02-10', positions, nkPct: 5, discountPct: 2, vatPct: 19 });
+  assert.equal(o.status, 'entwurf');
+  assert.equal(o.offerNo, null);
+  assert.equal(o.subtotal, 42200, 'Bedarfsposition zählt nicht mit');
+  assert.equal(o.optionalTotal, 1000);
+  assert.equal(o.nk, 2110);
+  assert.equal(o.discount, 886.2);
+  assert.equal(o.net, 43423.8);
+  assert.equal(o.gross, 51674.32);
+  assert.equal(o.hours, 400);
+  assert.equal(o.validUntil, '2026-04-11', 'Bindefrist aus den Einstellungen');
+  assert.throws(() => handle(db, 'PUT', `/api/offers/${o.id}`, {}, { status: 'beauftragt' }), (e) => e.status === 409);
+  handle(db, 'PUT', '/api/settings', {}, { offerNoFormat: 'A{JJ}/{NNNN}' });
+  const sent = handle(db, 'PUT', `/api/offers/${o.id}`, {}, { status: 'versendet' });
+  assert.equal(sent.offerNo, 'A26/0001');
+  const frozen = handle(db, 'PUT', `/api/offers/${o.id}`, {}, { positions: [], note: 'Rückfrage AG' });
+  assert.equal(frozen.net, 43423.8, 'versendetes Angebot bleibt unverändert');
+  assert.equal(frozen.note, 'Rückfrage AG');
+  assert.throws(() => handle(db, 'DELETE', `/api/offers/${o.id}`, {}), (e) => e.status === 409);
+
+  const res = handle(db, 'POST', '/api/offers/accept', {}, { id: o.id, setBudget: true });
+  assert.equal(res.offer.status, 'beauftragt');
+  assert.equal(res.workPackages.length, 2, 'je feste Position ein Arbeitspaket');
+  assert.deepEqual(res.workPackages.map((w) => [w.code, w.positionKey, w.budget, w.plannedHours, w.phaseId]), [['AP 1', 'a', 40000, 380, ph.id], ['AP 2', 'b', 2200, 20, null]]);
+  const proj = handle(db, 'GET', `/api/projects/${p.id}`, {});
+  assert.equal(proj.status, 'Beauftragt');
+  assert.equal(proj.budget, 43423.8);
+  assert.equal(handle(db, 'POST', '/api/offers/accept', {}, { id: o.id }).workPackages.length, 0, 'keine doppelten Arbeitspakete');
+
+  // Zeiten auf Arbeitspakete buchen – direkt und über eine Aufgabe
+  const e = handle(db, 'POST', '/api/employees', {}, { name: 'A', hourlyRate: 100, weeklyHours: 40 });
+  const [ap1, ap2] = res.workPackages;
+  handle(db, 'POST', '/api/timeEntries/set', {}, { employeeId: e.id, projectId: p.id, phaseId: ph.id, workPackageId: ap1.id, date: '2026-03-02', hours: 6 });
+  handle(db, 'POST', '/api/timeEntries/set', {}, { employeeId: e.id, projectId: p.id, phaseId: ph.id, date: '2026-03-02', hours: 2 });
+  const t = handle(db, 'POST', '/api/tasks', {}, { projectId: p.id, title: 'Aufmaß', workPackageId: ap2.id });
+  handle(db, 'POST', '/api/timeEntries', {}, { employeeId: e.id, projectId: p.id, taskId: t.id, date: '2026-03-03', hours: 3 });
+  const by = new Map(handle(db, 'GET', '/api/summary', {}).byWorkPackage.map((r) => [r.workPackageId, r]));
+  assert.deepEqual([by.get(ap1.id).hours, by.get(ap1.id).cost, by.get(ap2.id).hours], [6, 600, 3]);
+  assert.equal(handle(db, 'GET', '/api/timeEntries', { employeeId: String(e.id) }).length, 3, 'gleicher Tag, mit und ohne Arbeitspaket getrennt');
+  handle(db, 'DELETE', `/api/workPackages/${ap2.id}`, {});
+  assert.equal(handle(db, 'GET', `/api/tasks/${t.id}`, {}).workPackageId, null);
+  assert.equal(handle(db, 'PUT', `/api/workPackages/${ap1.id}`, {}, { progress: 100 }).status, 'abgeschlossen');
+});
+
+test('Angebote und Vorlagen: Rechte', () => {
+  const db = fresh();
+  seedRoles(db);
+  const p = handle(db, 'POST', '/api/projects', {}, { name: 'P' });
+  handle(db, 'POST', '/api/offers', {}, { projectId: p.id, date: '2026-01-01', positions: [{ title: 'x', amount: 100 }] });
+  const ma = { employeeId: 1, role: 'mitarbeiter' };
+  assert.throws(() => handle(db, 'GET', '/api/offers', {}, null, ma), (e) => e.status === 403);
+  assert.equal(handle(db, 'GET', '/api/bootstrap', {}, null, ma).offers.length, 0);
+  assert.throws(() => handle(db, 'POST', '/api/workPackages', {}, { projectId: p.id, title: 'AP' }, ma), (e) => e.status === 403);
+  assert.equal(handle(db, 'POST', '/api/workPackages', {}, { projectId: p.id, title: 'AP', budget: 500 }).code, 'AP 1');
+  assert.equal(handle(db, 'GET', '/api/bootstrap', {}, null, ma).workPackages[0].budget, null, 'Budget nur mit Kostenrecht');
+  const img = 'data:image/png;base64,iVBORw0KGgo=';
+  assert.throws(() => handle(db, 'PUT', '/api/assets/frameFirst', {}, { data: img }, ma), (e) => e.status === 403);
+  assert.throws(() => handle(db, 'PUT', '/api/assets/frameFirst', {}, { data: 'data:text/html;base64,AAAA' }), (e) => e.status === 400);
+  handle(db, 'PUT', '/api/assets/frameFirst', {}, { data: img, name: 'Briefbogen.png' });
+  handle(db, 'PUT', '/api/assets/frameFirst', {}, { data: img, name: 'Neu.png' });
+  assert.deepEqual(handle(db, 'GET', '/api/assets', {}).map((a) => [a.key, a.name]), [['frameFirst', 'Neu.png']]);
+  // Rechnungsnummernkreis aus den Stammdaten
+  handle(db, 'PUT', '/api/settings', {}, { invoiceNoFormat: '{JJJJ}-{NN}-R' });
+  const inv = handle(db, 'POST', '/api/invoices', {}, { projectId: p.id, date: '2026-05-01', lines: [{ key: 'a', label: 'L', fee: 100, percent: 100 }], nkPct: 0, vatPct: 19 });
+  assert.equal(handle(db, 'PUT', `/api/invoices/${inv.id}`, {}, { status: 'gestellt' }).invoiceNo, '2026-01-R');
+});
