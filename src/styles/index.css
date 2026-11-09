@@ -150,7 +150,7 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   border-radius: var(--radius); box-shadow: var(--shadow-lg); overflow: hidden; z-index: 50;
 }
 .dropdown-head { padding: 10px 14px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 600; }
-.dropdown-scroll { max-height: 380px; overflow-y: auto; padding: 4px; }
+.dropdown-scroll { max-height: min(380px, calc(100vh - 150px)); max-height: min(380px, calc(100dvh - 150px)); overflow-y: auto; padding: 4px; }
 .dropdown-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border: 0; background: none; text-align: left; border-radius: 7px; cursor: pointer; }
 .dropdown-item:hover { background: var(--surface-3); }
 .dropdown-item.selected { background: var(--primary-soft); }
@@ -361,7 +361,7 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 .modal-backdrop { position: fixed; inset: 0; background: rgba(11, 22, 40, 0.48); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px 16px; z-index: 100; animation: fade 0.12s; overflow-y: auto; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.985); } }
-.modal { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-lg); width: 100%; animation: pop 0.16s ease-out; display: flex; flex-direction: column; max-height: 88vh; }
+.modal { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-lg); width: 100%; animation: pop 0.16s ease-out; display: flex; flex-direction: column; max-height: 88vh; max-height: 88dvh; }
 .modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 22px 14px; border-bottom: 1px solid var(--border); }
 .modal-header h2 { font-size: 17px; }
 .modal-header p { margin: 3px 0 0; font-size: 13px; }
@@ -384,11 +384,11 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 .toast-info svg:first-child { color: var(--accent); }
 
 /* ---------------------------------------------------------- Schnellsuche */
-.palette-backdrop { padding-top: 12vh; }
+.palette-backdrop { padding-top: min(12vh, 60px); }
 .palette { width: 100%; max-width: 620px; background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-lg); overflow: hidden; animation: pop 0.14s ease-out; }
 .palette-input { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); color: var(--muted); }
 .palette-input input { flex: 1; border: 0; outline: 0; font-size: 16px; background: none; color: var(--text); }
-.palette-list { max-height: 420px; overflow-y: auto; padding: 6px; }
+.palette-list { max-height: min(420px, calc(100vh - 140px)); max-height: min(420px, calc(100dvh - 140px)); overflow-y: auto; padding: 6px; }
 .palette-group { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; color: var(--faint); padding: 10px 10px 4px; }
 .palette-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; background: none; border-radius: 8px; text-align: left; cursor: pointer; }
 .palette-item.active { background: var(--primary-soft); }
@@ -483,7 +483,7 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 
 /* ---------------------------------------------------------- Gantt */
 .gantt { --row-h: 40px; position: relative; }
-.gantt-scroll { overflow: auto; max-height: calc(100vh - 250px); min-height: 200px; }
+.gantt-scroll { overflow: auto; max-height: max(340px, calc(100vh - 250px)); max-height: max(340px, calc(100dvh - 250px)); min-height: 200px; }
 .gantt-inner { position: relative; }
 .gantt-head { display: flex; position: sticky; top: 0; z-index: 6; background: var(--surface); border-bottom: 1px solid var(--border-strong); }
 .gantt-label {
@@ -573,7 +573,7 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 .kanban-erledigt .kanban-dot { background: #16a34a; }
 .count { font-size: 11.5px; font-weight: 600; background: var(--surface); color: var(--text-2); border-radius: 10px; padding: 0 7px; border: 1px solid var(--border); }
 .kanban-hint { margin: 0 4px 10px; font-size: 11.5px; color: var(--muted); }
-.kanban-list { display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 330px); overflow-y: auto; padding: 2px; margin: -2px; }
+.kanban-list { display: flex; flex-direction: column; gap: 8px; max-height: max(340px, calc(100vh - 330px)); max-height: max(340px, calc(100dvh - 330px)); overflow-y: auto; padding: 2px; margin: -2px; }
 .kanban-empty { border: 1.5px dashed var(--border-strong); border-radius: 8px; padding: 18px; text-align: center; color: var(--faint); font-size: 12.5px; }
 .kanban-drop-indicator { height: 3px; background: var(--primary); border-radius: 2px; margin: 2px 0 6px; }
 .task-card {
@@ -599,7 +599,7 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 .status-erledigt { background: #e5f6ea; color: #15803d; }
 
 /* ---------------------------------------------------------- Ressourcen-Raster */
-.rg-wrap { overflow: auto; max-height: calc(100vh - 330px); position: relative; }
+.rg-wrap { overflow: auto; max-height: max(340px, calc(100vh - 330px)); max-height: max(340px, calc(100dvh - 330px)); position: relative; }
 .rg { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; }
 .rg th, .rg td { border-bottom: 1px solid var(--border); }
 .rg thead th { position: sticky; top: 0; z-index: 3; background: var(--surface-2); font-size: 11.5px; color: var(--muted); font-weight: 600; padding: 8px 4px; }
@@ -870,7 +870,7 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 .clickable-text:hover strong { color: var(--primary); }
 .row-actions { display: flex; gap: 6px; }
 .month-label { min-width: 130px; text-align: center; }
-.cal-wrap { overflow: auto; max-height: calc(100vh - 300px); }
+.cal-wrap { overflow: auto; max-height: max(340px, calc(100vh - 300px)); max-height: max(340px, calc(100dvh - 300px)); }
 .cal { border-collapse: separate; border-spacing: 0; font-size: 12px; width: 100%; }
 .cal th, .cal td { border-bottom: 1px solid var(--border); }
 .cal thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); }
@@ -966,6 +966,52 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   .page-header h1 { font-size: 20px; }
   .search-input { min-width: 0; flex: 1; }
 }
+
+/* ---------------------------------------------------------- Handy: Hoch- und Querformat */
+@media (max-width: 700px), (max-height: 520px) {
+  /* Ressourcenraster kompakt: schmale Namensspalte, Kapazität im Tooltip */
+  .rg .rg-name { min-width: 128px; max-width: 150px; padding: 4px 8px; }
+  .rg .rg-cap { display: none; }
+  .rg-emp-text small, .rg-expand > svg { display: none; }
+  .rg-expand { gap: 6px; }
+  .rg-emp-text strong { font-size: 12px; }
+  .rg-week { min-width: 54px; }
+  .rg-cell { height: 40px; font-size: 12px; }
+  .rg-proj .rg-name, .rg-add .rg-name { padding-left: 10px; }
+  .rg-proj-label { font-size: 11.5px; }
+  .rg-add-hint { display: none; }
+  .gantt { --label-w: 150px !important; }
+  .gantt-label-meta { display: none; }
+  .cal .cal-name { min-width: 120px; max-width: 130px; padding: 4px 8px; }
+  .cal .cal-name .avatar { display: none; }
+}
+/* Kleine Bildschirme (Handy hoch und quer): Inhalt zuerst */
+@media (max-width: 700px), (max-height: 520px) {
+  .page-subtitle:not(:has(.header-meta)) { display: none; }
+  .page-header { gap: 10px; }
+  .page > .res-kpis { order: 3; }
+}
+/* Querformat / geringe Höhe: Seite scrollt als Ganzes, Kopfzeile nicht fixiert */
+@media (max-height: 520px) {
+  .topbar { position: static; height: 50px; }
+  /* Raster und Spalten so hoch wie der Bildschirm – Kopfzeilen und Namen bleiben beim Scrollen stehen */
+  .gantt-scroll, .rg-wrap, .cal-wrap { max-height: max(240px, calc(100vh - 56px)); max-height: max(240px, calc(100dvh - 56px)); }
+  .kanban-list { max-height: max(200px, calc(100vh - 150px)); max-height: max(200px, calc(100dvh - 150px)); }
+  .content { padding-top: 12px; }
+  .page { gap: 14px; }
+  .page-header h1 { font-size: 19px; }
+  .kpi-grid, .kpi-grid-4 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .modal-backdrop { padding: 8px; align-items: center; }
+  .modal { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
+  .modal-header { padding: 10px 16px 8px; }
+  .modal-body { padding: 12px 16px; }
+  .modal-footer { padding: 8px 16px; }
+  .palette-backdrop { padding-top: 8px; }
+  .sidebar .brand { padding: 10px 14px; }
+  .sidebar .nav { padding: 6px 8px; }
+  .sidebar .nav-item { padding: 6px 10px; }
+}
+
 @media print {
   @page { size: A4; margin: 16mm 14mm 16mm 18mm; }
   .sidebar, .topbar, .toolbar, .page-actions, .card-actions, .no-print, .toasts { display: none !important; }

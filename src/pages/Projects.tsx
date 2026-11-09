@@ -9,6 +9,7 @@ import { PROJECT_TYPES, type Project } from '../types';
 import { projectMetrics } from '../utils/metrics';
 import { fmtDate, todayISO } from '../utils/date';
 import { fmtEurCompact, fmtPct } from '../utils/format';
+import { NARROW, useMediaQuery } from '../utils/useMedia';
 
 type StatusFilter = 'laufend' | 'akquise' | 'abgeschlossen' | 'alle';
 
@@ -23,7 +24,10 @@ export function Projects() {
   const [status, setStatus] = useState<StatusFilter>('laufend');
   const [type, setType] = useState('');
   const [lead, setLead] = useState('');
-  const [view, setViewState] = useState<'table' | 'cards'>(readView);
+  const [savedView, setViewState] = useState<'table' | 'cards'>(readView);
+  // Auf dem Handy immer Kacheln – die Tabelle wäre zu breit
+  const narrow = useMediaQuery(NARROW);
+  const view = narrow ? 'cards' : savedView;
   const [creating, setCreating] = useState(false);
   const today = todayISO();
   const setView = (v: 'table' | 'cards') => {
@@ -76,10 +80,10 @@ export function Projects() {
             {leads.map((e) => <option key={e!.id} value={e!.id}>{e!.name}</option>)}
           </select>
           <span className="spacer" />
-          <Segmented value={view} onChange={setView} options={[
+          {!narrow && <Segmented value={view} onChange={setView} options={[
             { value: 'table', label: <List size={16} aria-label="Tabelle" /> },
             { value: 'cards', label: <LayoutGrid size={16} aria-label="Kacheln" /> },
-          ]} />
+          ]} />}
         </div>
       </PageHeader>
 

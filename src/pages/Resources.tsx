@@ -71,7 +71,7 @@ export function Resources() {
         </div>
       </PageHeader>
 
-      <div className="kpi-grid kpi-grid-4">
+      <div className="kpi-grid kpi-grid-4 res-kpis">
         <Kpi label={`Auslastung KW ${isoWeek(first4[0])}–${isoWeek(first4[first4.length - 1])}`} value={fmtPct(planned4 / Math.max(1, capTotal4))}
           sub={`${fmtNum(planned4)} h geplant von ${fmtNum(capTotal4)} h verfügbar`} />
         <Kpi label="Freie Kapazität (4 Wochen)" value={`${fmtNum(free4)} h`} sub="Summe nicht verplanter Stunden" />
@@ -79,7 +79,7 @@ export function Resources() {
         <Kpi label="Abwesenheit (4 Wochen)" value={`${fmtNum(nominal4 - capTotal4)} h`} sub={`Urlaub, Feiertage, Krankheit u. a. · ${fmtPct((nominal4 - capTotal4) / Math.max(1, nominal4))} der Sollzeit`} />
       </div>
 
-      <Card padded={false}>
+      <Card padded={false} className="res-grid">
         <ResourceGrid weeks={weeks} employees={employees} showAbsolute={mode === 'h'} />
         <div className="rg-legend">
           <span><i className="util-low" /> &lt; 50 %</span>
