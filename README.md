@@ -15,6 +15,8 @@ ohne Installation an den Arbeitsplätzen.
 | **Terminplanung** | Rahmenterminplan aller Projekte; Phasen und Aufgaben per **Drag & Drop** verschieben bzw. an den Enden verlängern; Meilensteine; Wochen/Monate/Quartale |
 | **Ressourcenplanung** | Wochenraster je Mitarbeiter über alle Projekte, Auslastung in % oder Stunden, Überlastung rot markiert, Stunden direkt im Raster planen |
 | **Aufgaben** | Kanban-Board (Offen → In Bearbeitung → **In Prüfung** (4-Augen-Prinzip) → Erledigt) und Listenansicht; Zuweisung, Priorität, Fälligkeit, Aufwand |
+| **Aufgabenvorlagen** | Kataloge mit Grund- und Besonderen Leistungen für **HOAI LPH 1–9** (Ingenieurbauwerke, fachlich angepasst an Stahlwasserbau bzw. bewegliche Brücken), **Werkstattplanung erstellen**, **Prüfung der Werkstattplanung des AN / Fertigungsüberwachung / FAT** und **Bauwerksprüfung DIN 1076**; automatische Terminierung in der Leistungsphase und Zuweisung nach Rolle aus dem Projektteam |
+| **Protokolle** | Besprechungsprotokolle je Projekt (Planungs-/Baubesprechung, Jour fixe, Werksabnahme, Abnahme …) mit Tagesordnung, Punkten **I / F / A**, Verantwortlichen und Terminen; offene Punkte aus dem Vorgängerprotokoll übernehmen; A-Punkte als Aufgaben anlegen; projektübergreifende Liste offener Punkte; Druck/PDF im Protokolllayout, Verteilung per E-Mail; automatisches Speichern |
 | **Zeiterfassung** | Wochenstundenzettel je Projekt und Leistungsphase; geplante Stunden als Vorschlag |
 | **Kosten & Controlling** | Budget, Ist-Kosten (Stunden × Verrechnungssatz + Fremdkosten), Leistungswert, CPI, Prognose (Earned-Value-Methode) je Projekt und Phase; CSV-Export für Excel |
 | **Team** | Mitarbeitende mit Rolle, Abteilung, Qualifikationen, Verrechnungssatz, Wochenarbeitszeit und Auslastung |
@@ -63,10 +65,13 @@ server/            Node.js-HTTP-Server ohne Framework-Abhängigkeiten
   db.js            Schema, Migration, CRUD (node:sqlite)
   api.js           REST-API, Validierung, Kaskadenlöschung, Auswertungen
   seed.js          realistische Demodaten (relativ zum aktuellen Datum)
+  seedProtocols.js Beispielprotokolle
   api.test.js      Tests (node:test)
 src/               React 19 + TypeScript (Vite)
   store.tsx        zentraler Datenzustand mit optimistischen Updates
   utils/metrics.ts Projektkennzahlen (Earned Value, Ampeln)
+  utils/taskTemplates.ts  Aufgabenkataloge HOAI / Werkstattplanung / Bauwerksprüfung
+  utils/protocols.ts      Nummerierung, offene Punkte, Übernahme in Folgeprotokolle
   components/      Gantt, Kanban, Ressourcenraster, Diagramme, Formulare
   pages/           Cockpit, Projekte, Terminplanung, Ressourcen, Aufgaben, Zeiten, Controlling, Team
 ```

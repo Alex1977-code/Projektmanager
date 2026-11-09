@@ -119,6 +119,48 @@ export interface CostItem {
   status: 'geplant' | 'angefallen';
 }
 
+export const PROTOCOL_TYPES = ['Planungsbesprechung', 'Baubesprechung', 'Jour fixe', 'Werksabnahme / FAT', 'Abnahme', 'Ortstermin', 'Interne Besprechung', 'Telefonnotiz'] as const;
+
+/** top = Tagesordnungspunkt, I = Information, F = Festlegung, A = Aufgabe */
+export type ProtocolItemKind = 'top' | 'I' | 'F' | 'A';
+export const ITEM_KIND_LABEL: Record<ProtocolItemKind, string> = { top: 'TOP', I: 'Information', F: 'Festlegung', A: 'Aufgabe' };
+
+export interface ProtocolItem {
+  id: string;
+  kind: ProtocolItemKind;
+  text: string;
+  assigneeId?: ID | null;
+  responsible?: string | null; // externe Verantwortliche (z. B. „AG“, „AN Stahlbau“)
+  dueDate?: string | null;
+  taskId?: ID | null;
+  done?: boolean;
+  carriedFrom?: string | null; // ID des Punktes im Vorgängerprotokoll
+}
+
+export interface Participant {
+  employeeId?: ID | null;
+  name?: string;
+  company?: string;
+  present: boolean;
+}
+
+export interface Protocol {
+  id: ID;
+  projectId: ID;
+  number: number;
+  title: string | null;
+  type: string | null;
+  date: string;
+  time: string | null;
+  location: string | null;
+  status: 'entwurf' | 'versendet';
+  participants: Participant[];
+  items: ProtocolItem[];
+  nextDate: string | null;
+  authorId: ID | null;
+  createdAt: string | null;
+}
+
 export interface Settings {
   companyName: string;
   hoursPerDay: number;
@@ -148,8 +190,9 @@ export interface Data {
   tasks: Task[];
   allocations: Allocation[];
   costs: CostItem[];
+  protocols: Protocol[];
   summary: Summary;
 }
 
-export type Collection = 'employees' | 'projects' | 'phases' | 'milestones' | 'tasks' | 'allocations' | 'costs';
+export type Collection = 'employees' | 'projects' | 'phases' | 'milestones' | 'tasks' | 'allocations' | 'costs' | 'protocols';
 export type EntityOf<C extends Collection> = Data[C][number];

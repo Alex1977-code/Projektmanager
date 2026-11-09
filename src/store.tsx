@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from './api';
-import type { Allocation, Collection, Data, Employee, EntityOf, ID, Settings, Summary } from './types';
+import type { Allocation, Collection, Data, Employee, EntityOf, ID, Settings, Summary, Task } from './types';
 import { buildIndex, type Index } from './utils/metrics';
 import { useToast } from './components/Toast';
 
@@ -13,6 +13,7 @@ interface Store {
   update: <C extends Collection>(c: C, id: ID, patch: Partial<EntityOf<C>>) => Promise<EntityOf<C> | undefined>;
   remove: <C extends Collection>(c: C, id: ID) => Promise<boolean>;
   setAllocation: (employeeId: ID, projectId: ID, weekStart: string, hours: number) => Promise<void>;
+  createTasks: (list: Partial<Task>[]) => Promise<Task[]>;
   refreshSummary: () => Promise<void>;
   reload: () => Promise<void>;
   saveSettings: (patch: Partial<Settings>) => Promise<void>;
@@ -124,6 +125,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [fail]);
 
+  const createTasks = useCallback(async (list: Partial<Task>[]) => {
+    try {
+      const rows = await api.post<Task[]>('/api/tasks/batch', list);
+      setData((d) => (d ? { ...d, tasks: [...d.tasks, ...rows] } : d));
+      return rows;
+    } catch (e) {
+      fail(e);
+      throw e;
+    }
+  }, [fail]);
+
   const saveSettings = useCallback(async (patch: Partial<Settings>) => {
     try {
       const settings = await api.put<Settings>('/api/settings', patch);
@@ -171,7 +183,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  const value: Store = { data, idx, me, setMeId, create, update, remove, setAllocation, refreshSummary, reload, saveSettings };
+  const value: Store = { data, idx, me, setMeId, create, update, remove, setAllocation, createTasks, refreshSummary, reload, saveSettings };
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 

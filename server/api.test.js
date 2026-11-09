@@ -92,3 +92,33 @@ test('Demodaten sind konsistent', () => {
     assert.ok(Math.abs(sum - p.budget) < 1000, `${p.number} Budgetverteilung`);
   }
 });
+
+test('Protokolle: fortlaufende Nummer je Projekt, JSON-Felder, Löschen mit Projekt', () => {
+  const db = fresh();
+  const p1 = handle(db, 'POST', '/api/projects', {}, { name: 'A' });
+  const p2 = handle(db, 'POST', '/api/projects', {}, { name: 'B' });
+  const a = handle(db, 'POST', '/api/protocols', {}, { projectId: p1.id, date: '2026-11-09', items: [{ id: 'x', kind: 'A', text: 'Test' }] });
+  const b = handle(db, 'POST', '/api/protocols', {}, { projectId: p1.id, date: '2026-11-16' });
+  const c = handle(db, 'POST', '/api/protocols', {}, { projectId: p2.id, date: '2026-11-16' });
+  assert.deepEqual([a.number, b.number, c.number], [1, 2, 1]);
+  assert.equal(a.status, 'entwurf');
+  assert.equal(a.items[0].text, 'Test');
+  assert.deepEqual(b.participants, []);
+  assert.throws(() => handle(db, 'PUT', `/api/protocols/${a.id}`, {}, { nextDate: '16.11.2026' }), /Ungültiges Datum/);
+  handle(db, 'DELETE', `/api/projects/${p1.id}`, {});
+  assert.equal(handle(db, 'GET', '/api/protocols', {}).length, 1);
+});
+
+test('Aufgaben im Stapel anlegen (Vorlagen)', () => {
+  const db = fresh();
+  const p = handle(db, 'POST', '/api/projects', {}, { name: 'A' });
+  const rows = handle(db, 'POST', '/api/tasks/batch', {}, [
+    { projectId: p.id, title: 'Lastannahmen', dueDate: '2026-12-01' },
+    { projectId: p.id, title: 'Entwurfsstatik', status: 'in_arbeit' },
+  ]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].status, 'offen');
+  assert.equal(rows[1].status, 'in_arbeit');
+  assert.throws(() => handle(db, 'POST', '/api/tasks/batch', {}, [{ projectId: p.id }]), /Pflichtfeld/);
+  assert.equal(handle(db, 'GET', '/api/tasks', {}).length, 2, 'fehlerhafter Stapel legt nichts an');
+});

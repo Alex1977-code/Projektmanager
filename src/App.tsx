@@ -13,6 +13,8 @@ import { Timesheet } from './pages/Timesheet';
 import { Controlling } from './pages/Controlling';
 import { Team } from './pages/Team';
 import { Settings } from './pages/Settings';
+import { Protocols } from './pages/Protocols';
+import { ProtocolEditor } from './pages/ProtocolEditor';
 
 export function App() {
   return (
@@ -30,6 +32,8 @@ export function App() {
                 <Route path="/aufgaben" element={<Tasks />} />
                 <Route path="/zeiten" element={<Timesheet />} />
                 <Route path="/controlling" element={<Controlling />} />
+                <Route path="/protokolle" element={<Protocols />} />
+                <Route path="/protokolle/:id" element={<ProtocolEditor />} />
                 <Route path="/team" element={<Team />} />
                 <Route path="/einstellungen" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

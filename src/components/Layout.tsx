@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, CalendarRange, ChevronDown, Clock, CornerDownLeft, FolderKanban, LayoutDashboard,
-  ListChecks, Menu, Plus, Search, Settings, Users, Gauge, X,
+  ListChecks, Menu, NotebookPen, Plus, Search, Settings, Users, Gauge, X,
 } from 'lucide-react';
 import { useStore } from '../store';
 import { Avatar } from './ui';
@@ -16,6 +16,7 @@ const NAV = [
   { to: '/terminplan', label: 'Terminplanung', icon: CalendarRange },
   { to: '/ressourcen', label: 'Ressourcen', icon: Gauge },
   { to: '/aufgaben', label: 'Aufgaben', icon: ListChecks },
+  { to: '/protokolle', label: 'Protokolle', icon: NotebookPen },
   { to: '/zeiten', label: 'Zeiterfassung', icon: Clock },
   { to: '/controlling', label: 'Kosten & Controlling', icon: BarChart3 },
   { to: '/team', label: 'Team', icon: Users },
@@ -155,6 +156,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
   const all = useMemo<PaletteItem[]>(() => [
     ...NAV.map((n) => ({ id: `nav${n.to}`, group: 'Navigation', label: n.label, to: n.to })),
     ...data.projects.map((p) => ({ id: `p${p.id}`, group: 'Projekte', label: `${p.number} · ${p.name}`, sub: `${p.client || ''} · ${p.status}`, to: `/projekte/${p.id}`, color: p.color || undefined })),
+    ...data.protocols.map((pr) => ({ id: `pr${pr.id}`, group: 'Protokolle', label: `${idx.projectById.get(pr.projectId)?.number || ''} · Nr. ${pr.number} ${pr.title || pr.type}`, sub: `${pr.type} · ${pr.date.split('-').reverse().join('.')}`, to: `/protokolle/${pr.id}` })),
     ...data.employees.map((e) => ({ id: `e${e.id}`, group: 'Team', label: e.name, sub: `${e.role} · ${e.department}`, to: `/team?id=${e.id}` })),
     ...data.tasks.filter((t) => t.status !== 'erledigt').map((t) => ({
       id: `t${t.id}`, group: 'Aufgaben', label: t.title, sub: `${idx.projectById.get(t.projectId)?.number || ''} · ${idx.employeeById.get(t.assigneeId || 0)?.name || 'nicht zugewiesen'}`,
@@ -164,7 +166,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const results = useMemo(() => {
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const list = terms.length ? all.filter((i) => terms.every((t) => `${i.label} ${i.sub || ''}`.toLowerCase().includes(t))) : all.filter((i) => i.group !== 'Aufgaben');
+    const list = terms.length ? all.filter((i) => terms.every((t) => `${i.label} ${i.sub || ''}`.toLowerCase().includes(t))) : all.filter((i) => i.group !== 'Aufgaben' && i.group !== 'Protokolle');
     return list.slice(0, 40);
   }, [all, q]);
 

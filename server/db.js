@@ -44,6 +44,11 @@ export const SCHEMA = {
     projectId: 'int', phaseId: 'int', date: 'text', category: 'text',
     description: 'text', amount: 'real', status: 'text',
   },
+  protocols: {
+    projectId: 'int', number: 'int', title: 'text', type: 'text', date: 'text', time: 'text',
+    location: 'text', status: 'text', participants: 'json', items: 'json', nextDate: 'text',
+    authorId: 'int', createdAt: 'text',
+  },
 };
 
 /** Pflichtfelder je Tabelle (für POST). */
@@ -56,6 +61,7 @@ export const REQUIRED = {
   allocations: ['employeeId', 'projectId', 'weekStart'],
   timeEntries: ['employeeId', 'projectId', 'date', 'hours'],
   costs: ['projectId', 'amount'],
+  protocols: ['projectId', 'date'],
 };
 
 const SQL_TYPE = { text: 'TEXT', real: 'REAL', int: 'INTEGER', bool: 'INTEGER', json: 'TEXT' };
@@ -80,6 +86,7 @@ export function openDb(file = DB_FILE) {
     CREATE INDEX IF NOT EXISTS ix_time_proj ON timeEntries(projectId, phaseId);
     CREATE INDEX IF NOT EXISTS ix_tasks_proj ON tasks(projectId);
     CREATE INDEX IF NOT EXISTS ix_phases_proj ON phases(projectId);
+    CREATE INDEX IF NOT EXISTS ix_protocols_proj ON protocols(projectId);
   `);
   return db;
 }

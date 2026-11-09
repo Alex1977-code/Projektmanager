@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { addDays, addMonths, todayISO } from '../utils/date';
 import { HOAI_PHASES, planPhases } from '../utils/hoai';
+import { planTemplate, TEMPLATE_SETS } from '../utils/taskTemplates';
 import { fmtEur, fmtHours } from '../utils/format';
 
 const num = (v: string) => (v === '' ? null : Number(v.replace(',', '.')));
@@ -41,11 +42,12 @@ function activeEmployees(list: Employee[], keepId?: ID | null) {
 
 // ===================================================================== Projekt
 export function ProjectForm({ project, onClose, onSaved }: { project?: Project; onClose: () => void; onSaved?: (p: Project) => void }) {
-  const { data, create, update, remove } = useStore();
+  const { data, create, createTasks, update, remove } = useStore();
   const toast = useToast();
   const confirm = useConfirm();
   const isNew = !project;
   const today = todayISO();
+  const [withTasks, setWithTasks] = useState(true);
   const nextNumber = useMemo(() => {
     const y = today.slice(0, 4);
     const nums = data.projects.map((p) => p.number || '').filter((n) => n.startsWith(`P-${y}-`)).map((n) => Number(n.slice(7)) || 0);
@@ -82,8 +84,20 @@ export function ProjectForm({ project, onClose, onSaved }: { project?: Project; 
       if (isNew) {
         const colors = ['#2563eb', '#0891b2', '#7c3aed', '#059669', '#ea580c', '#db2777', '#4f46e5', '#0d9488'];
         const created = await create('projects', { ...payload, color: colors[data.projects.length % colors.length] });
+        const createdPhases: Phase[] = [];
         for (const ph of planPhases(lph, v.startDate, v.endDate, payload.budget || 0)) {
-          await create('phases', { ...ph, projectId: created.id });
+          createdPhases.push(await create('phases', { ...ph, projectId: created.id }));
+        }
+        if (withTasks && createdPhases.length) {
+          // Grundleistungen als Aufgaben – PL-Aufgaben an die Projektleitung, übrige zunächst offen
+          const planned = planTemplate({
+            set: TEMPLATE_SETS[0], project: created, phases: createdPhases, existingTasks: [], employees: data.employees, teamIds: new Set(),
+          }).filter((t) => t.template.kind === 'G');
+          await createTasks(planned.map((t, i) => ({
+            projectId: created.id, phaseId: t.phaseId, title: t.title, status: 'offen', priority: t.template.prio || 'mittel',
+            assigneeId: t.template.role === 'pl' ? created.leadId : null, estimatedHours: t.template.hours,
+            startDate: t.startDate, dueDate: t.dueDate, description: 'Vorlage: HOAI-Leistungsphasen', sort: i,
+          })));
         }
         await create('milestones', { projectId: created.id, name: 'Auftragserteilung', date: v.startDate, done: v.startDate <= today });
         toast.success(`Projekt ${created.number} angelegt`);
@@ -162,6 +176,10 @@ export function ProjectForm({ project, onClose, onSaved }: { project?: Project; 
               ))}
             </div>
             <span className="field-hint">Termine und Budget werden anteilig (HOAI-Bewertung) verteilt und können anschließend im Terminplan angepasst werden.</span>
+            <label className="check-inline" style={{ marginTop: 6 }}>
+              <input type="checkbox" checked={withTasks} onChange={(e) => setWithTasks(e.target.checked)} />
+              Grundleistungen je Leistungsphase als Aufgaben anlegen (fachlich angepasst an den Bauwerkstyp)
+            </label>
           </div>
         )}
       </form>

@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Building2, Calendar, ChevronLeft, ChevronRight, Flag, MapPin, Pencil, Plus, Receipt, User } from 'lucide-react';
+import { ArrowLeft, BookOpenCheck, Building2, Calendar, ChevronLeft, ChevronRight, Flag, MapPin, Pencil, Plus, Receipt, User } from 'lucide-react';
 import { useStore } from '../store';
 import { AmpelBadge, Avatar, Card, EmptyState, Kpi, PageHeader, PriorityTag, ProgressBar, ProjectStatusBadge, Segmented, TaskStatusBadge } from '../components/ui';
 import { CostForm, MilestoneForm, PhaseForm, ProjectForm, TaskForm } from '../components/forms';
 import { Gantt, ganttRange, type GanttRow, type GanttScale } from '../components/Gantt';
 import { KanbanBoard } from '../components/Kanban';
+import { TemplateDialog } from '../components/TemplateDialog';
+import { NewProtocolDialog, OpenPointsTable, ProtocolTable } from '../components/Protocols';
 import { ProjectResourceGrid } from '../components/ResourceGrid';
 import { BulletBar, BulletLegend } from '../components/Charts';
 import { phaseKey, phaseMetrics, projectMetrics, type ProjectMetrics } from '../utils/metrics';
@@ -13,18 +15,19 @@ import { addDays, diffDays, fmtDate, relDays, startOfWeek, todayISO, weeksBetwee
 import { classNames, fmtEur, fmtEurCompact, fmtEurSigned, fmtHours, fmtNum, fmtPct, sum } from '../utils/format';
 import type { CostItem, Milestone, Phase, Project, Task, TaskStatus } from '../types';
 
-type Tab = 'uebersicht' | 'termine' | 'aufgaben' | 'ressourcen' | 'kosten';
+type Tab = 'uebersicht' | 'termine' | 'aufgaben' | 'ressourcen' | 'kosten' | 'protokolle';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'uebersicht', label: 'Übersicht' },
   { id: 'termine', label: 'Terminplan' },
   { id: 'aufgaben', label: 'Aufgaben' },
   { id: 'ressourcen', label: 'Ressourcen' },
   { id: 'kosten', label: 'Kosten' },
+  { id: 'protokolle', label: 'Protokolle' },
 ];
 
 export function ProjectDetail() {
   const { id } = useParams();
-  const { idx } = useStore();
+  const { data, idx } = useStore();
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
   const project = idx.projectById.get(Number(id));
@@ -41,6 +44,7 @@ export function ProjectDetail() {
   const m = projectMetrics(project, idx, today);
   const lead = idx.employeeById.get(project.leadId || 0);
   const tasks = idx.tasksByProject.get(project.id) || [];
+  const protocolCount = data.protocols.filter((pr) => pr.projectId === project.id).length;
 
   return (
     <div className="page">
@@ -65,6 +69,7 @@ export function ProjectDetail() {
               onClick={() => setParams(t.id === 'uebersicht' ? {} : { tab: t.id }, { replace: true })}>
               {t.label}
               {t.id === 'aufgaben' && <span className="tab-count">{m.tasksOpen}</span>}
+              {t.id === 'protokolle' && <span className="tab-count">{protocolCount}</span>}
             </button>
           ))}
         </nav>
@@ -75,6 +80,7 @@ export function ProjectDetail() {
       {tab === 'aufgaben' && <ProjectTasks project={project} tasks={tasks} />}
       {tab === 'ressourcen' && <ProjectResources project={project} />}
       {tab === 'kosten' && <ProjectCosts project={project} m={m} />}
+      {tab === 'protokolle' && <ProjectProtocols project={project} />}
 
       {editing && <ProjectForm project={project} onClose={() => setEditing(false)} />}
     </div>
@@ -308,6 +314,7 @@ function ProjectTasks({ project, tasks }: { project: Project; tasks: Task[] }) {
   const [create, setCreate] = useState<Partial<Task> | null>(null);
   const [assignee, setAssignee] = useState('');
   const [phase, setPhase] = useState('');
+  const [templates, setTemplates] = useState(false);
   const phases = idx.phasesByProject.get(project.id) || [];
   const people = [...new Set(tasks.map((t) => t.assigneeId).filter(Boolean))].map((id) => idx.employeeById.get(id!)!).filter(Boolean);
   const filtered = tasks.filter((t) => (!assignee || String(t.assigneeId) === assignee) && (!phase || String(t.phaseId) === phase));
@@ -324,12 +331,32 @@ function ProjectTasks({ project, tasks }: { project: Project; tasks: Task[] }) {
           {people.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
         <span className="spacer" />
+        <button className="btn" onClick={() => setTemplates(true)}><BookOpenCheck size={16} /> Aus Vorlage …</button>
         <button className="btn btn-primary" onClick={() => setCreate({ projectId: project.id, phaseId: phase ? Number(phase) : null })}><Plus size={16} /> Aufgabe</button>
       </div>
       <KanbanBoard tasks={filtered} onOpen={setEdit} showProject={false}
         onCreate={(status) => setCreate({ projectId: project.id, status, phaseId: phase ? Number(phase) : null })} />
       {edit && <TaskForm task={edit} onClose={() => setEdit(null)} />}
       {create && <TaskForm defaults={create} onClose={() => setCreate(null)} />}
+      {templates && <TemplateDialog project={project} onClose={() => setTemplates(false)} />}
+    </>
+  );
+}
+
+// ======================================================================= Protokolle
+function ProjectProtocols({ project }: { project: Project }) {
+  const { data } = useStore();
+  const [creating, setCreating] = useState(false);
+  const protocols = data.protocols.filter((p) => p.projectId === project.id);
+  return (
+    <>
+      <Card title="Offene Punkte" subtitle="Aufgaben (A) aus allen Protokollen dieses Projekts" padded={false}>
+        <OpenPointsTable protocols={protocols} />
+      </Card>
+      <Card title="Besprechungsprotokolle" padded={false} actions={<button className="btn btn-sm btn-primary" onClick={() => setCreating(true)}><Plus size={14} /> Neues Protokoll</button>}>
+        <ProtocolTable protocols={protocols} />
+      </Card>
+      {creating && <NewProtocolDialog projectId={project.id} onClose={() => setCreating(false)} />}
     </>
   );
 }

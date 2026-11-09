@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { openDb, insert, transaction, setSettings, DB_FILE } from './db.js';
+import { seedProtocols } from './seedProtocols.js';
 
 // ---------------------------------------------------------------- Hilfsfunktionen
 function mulberry32(seed) {
@@ -202,6 +203,7 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
 
     // Wochenauslastung je Mitarbeiter sammeln, um realistische Planungen zu erzeugen
     const projectWeeks = []; // {pIdx, weekStart, team}
+    const byNumber = new Map();
 
     PROJECTS.forEach((p, pIdx) => {
       const startDate = addDays(thisMonday, p.start * 7);
@@ -211,6 +213,7 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
         leadId: emps[p.lead].id, status: p.status, priority: p.priority, startDate, endDate,
         budget: p.budget, description: p.description, color: PROJECT_COLORS[pIdx % PROJECT_COLORS.length],
       });
+      byNumber.set(p.number, { project, team: p.team });
 
       // Leistungsphasen über die Projektlaufzeit verteilen (mit leichter Überlappung)
       const total = diffDays(startDate, endDate);
@@ -342,6 +345,8 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
         }
       }
     });
+
+    seedProtocols(db, { byNumber, emp: (i) => emps[i].id, today: todayIso });
 
     // Ressourcenplanung: Kapazität jedes Mitarbeiters je Woche auf seine Projekte verteilen
     const empWeeks = new Map();

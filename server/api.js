@@ -11,7 +11,7 @@ export class ApiError extends Error {
   }
 }
 
-const BOOTSTRAP_TABLES = ['employees', 'projects', 'phases', 'milestones', 'tasks', 'allocations', 'costs'];
+const BOOTSTRAP_TABLES = ['employees', 'projects', 'phases', 'milestones', 'tasks', 'allocations', 'costs', 'protocols'];
 
 /** Ist-Stunden und Ist-Personalkosten (Stunden × Verrechnungssatz). */
 export function summary(db) {
@@ -38,7 +38,7 @@ function validate(table, data, partial) {
       }
     }
   }
-  for (const k of ['startDate', 'endDate', 'date', 'dueDate', 'weekStart']) {
+  for (const k of ['startDate', 'endDate', 'date', 'dueDate', 'weekStart', 'nextDate']) {
     if (data[k] && !/^\d{4}-\d{2}-\d{2}$/.test(String(data[k]))) {
       throw new ApiError(400, `Ungültiges Datum in Feld ${k}`);
     }
@@ -55,7 +55,7 @@ function cascadeDelete(db, table, id) {
   return transaction(db, () => {
     switch (table) {
       case 'projects':
-        for (const t of ['phases', 'milestones', 'tasks', 'allocations', 'timeEntries', 'costs']) {
+        for (const t of ['phases', 'milestones', 'tasks', 'allocations', 'timeEntries', 'costs', 'protocols']) {
           db.prepare(`DELETE FROM "${t}" WHERE projectId = ?`).run(id);
         }
         break;
@@ -166,6 +166,14 @@ export function handle(db, method, pathname, query, body) {
   if (resource === 'timeEntries' && idOrAction === 'set' && method === 'POST') return setTimeEntry(db, body);
   if (resource === 'timeEntries' && !idOrAction && method === 'GET') return queryTimeEntries(db, query);
 
+  if (resource === 'tasks' && idOrAction === 'batch' && method === 'POST') {
+    // Mehrere Aufgaben in einem Schritt anlegen (z. B. aus Aufgabenvorlagen)
+    if (!Array.isArray(body) || body.length > 500) throw new ApiError(400, 'Liste mit max. 500 Aufgaben erwartet');
+    body.forEach((t) => validate('tasks', t, false));
+    const createdAt = new Date().toISOString().slice(0, 10);
+    return transaction(db, () => body.map((t) => insert(db, 'tasks', { status: 'offen', createdAt, ...t })));
+  }
+
   if (resource === 'tasks' && idOrAction === 'reorder' && method === 'POST') {
     // [{id, status, sort}] – Kanban-Reihenfolge in einem Schritt speichern
     if (!Array.isArray(body)) throw new ApiError(400, 'Liste erwartet');
@@ -184,6 +192,12 @@ export function handle(db, method, pathname, query, body) {
       const data = { ...body };
       if (table === 'tasks' && !data.createdAt) data.createdAt = new Date().toISOString().slice(0, 10);
       if (table === 'employees' && data.active === undefined) data.active = true;
+      if (table === 'protocols') {
+        // fortlaufende Protokollnummer je Projekt
+        if (!data.number) data.number = (db.prepare('SELECT MAX(number) AS n FROM protocols WHERE projectId = ?').get(Number(data.projectId)).n || 0) + 1;
+        if (!data.status) data.status = 'entwurf';
+        if (!data.createdAt) data.createdAt = new Date().toISOString().slice(0, 10);
+      }
       return insert(db, table, data);
     }
   } else {
