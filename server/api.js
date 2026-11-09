@@ -4,14 +4,13 @@ import {
   getSettings, setSettings,
 } from './db.js';
 
-export class ApiError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
+import { ApiError } from './errors.js';
+import { handleAbsences, handleInvoices, isLead, maskAbsences } from './billing.js';
+import { ANONYMOUS_ADMIN } from './auth.js';
 
-const BOOTSTRAP_TABLES = ['employees', 'projects', 'phases', 'milestones', 'tasks', 'allocations', 'costs', 'protocols'];
+export { ApiError };
+
+const BOOTSTRAP_TABLES = ['employees', 'projects', 'phases', 'milestones', 'tasks', 'allocations', 'costs', 'protocols', 'absences'];
 
 /** Ist-Stunden und Ist-Personalkosten (Stunden × Verrechnungssatz). */
 export function summary(db) {
@@ -38,7 +37,7 @@ function validate(table, data, partial) {
       }
     }
   }
-  for (const k of ['startDate', 'endDate', 'date', 'dueDate', 'weekStart', 'nextDate']) {
+  for (const k of ['startDate', 'endDate', 'date', 'dueDate', 'weekStart', 'nextDate', 'periodEnd', 'paidDate']) {
     if (data[k] && !/^\d{4}-\d{2}-\d{2}$/.test(String(data[k]))) {
       throw new ApiError(400, `Ungültiges Datum in Feld ${k}`);
     }
@@ -55,6 +54,10 @@ function cascadeDelete(db, table, id) {
   return transaction(db, () => {
     switch (table) {
       case 'projects':
+        if (db.prepare("SELECT COUNT(*) AS n FROM invoices WHERE projectId = ? AND status <> 'entwurf'").get(id).n > 0) {
+          throw new ApiError(409, 'Für dieses Projekt wurden bereits Rechnungen gestellt. Bitte den Status auf „Abgeschlossen“ setzen statt zu löschen.');
+        }
+        db.prepare('DELETE FROM invoices WHERE projectId = ?').run(id);
         for (const t of ['phases', 'milestones', 'tasks', 'allocations', 'timeEntries', 'costs', 'protocols']) {
           db.prepare(`DELETE FROM "${t}" WHERE projectId = ?`).run(id);
         }
@@ -75,6 +78,7 @@ function cascadeDelete(db, table, id) {
         db.prepare('UPDATE tasks SET assigneeId = NULL WHERE assigneeId = ?').run(id);
         db.prepare('UPDATE projects SET leadId = NULL WHERE leadId = ?').run(id);
         db.prepare('DELETE FROM allocations WHERE employeeId = ?').run(id);
+        db.prepare('DELETE FROM absences WHERE employeeId = ?').run(id);
         break;
       }
       default:
@@ -136,18 +140,37 @@ function queryTimeEntries(db, q) {
  * Zentrale Routing-Funktion.
  * @returns {Promise<any>|any} Antwortobjekt (wird als JSON gesendet)
  */
-export function handle(db, method, pathname, query, body) {
+export function handle(db, method, pathname, query, body, user = ANONYMOUS_ADMIN) {
   const parts = pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
   const [resource, idOrAction] = parts;
+  const write = method !== 'GET';
+  const lead = isLead(user);
+  const deny = (msg) => { throw new ApiError(403, msg); };
 
   if (resource === 'health') return { ok: true, time: new Date().toISOString() };
+
+  // ------------------------------------------------------------ Berechtigungen
+  if (resource === 'export' && user.role !== 'admin') deny('Der Datenexport ist der Administration vorbehalten.');
+  if (resource === 'settings' && write && user.role !== 'admin') deny('Einstellungen kann nur die Administration ändern.');
+  if (resource === 'employees' && write && user.role !== 'admin') deny('Mitarbeiterdaten kann nur die Administration ändern.');
+  if (['projects', 'phases', 'costs', 'allocations'].includes(resource) && write && !lead) {
+    deny('Projektstammdaten, Termine, Kosten und Ressourcen ändert die Projektleitung.');
+  }
+  if (resource === 'timeEntries' && write && !lead && Number(body?.employeeId) !== user.employeeId) {
+    deny('Zeiten können nur für die eigene Person erfasst werden.');
+  }
 
   if (resource === 'bootstrap' && method === 'GET') {
     const out = { settings: getSettings(db) };
     for (const t of BOOTSTRAP_TABLES) out[t] = list(db, t);
+    out.invoices = lead ? list(db, 'invoices') : [];
+    out.absences = maskAbsences(out.absences, user);
     out.summary = summary(db);
     return out;
   }
+
+  if (resource === 'invoices') return handleInvoices(db, method, idOrAction ? Number(idOrAction) : null, body, user, validate);
+  if (resource === 'absences') return handleAbsences(db, method, idOrAction ? Number(idOrAction) : null, body, user, validate);
 
   if (resource === 'summary' && method === 'GET') return summary(db);
 

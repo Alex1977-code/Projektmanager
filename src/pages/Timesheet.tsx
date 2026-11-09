@@ -7,6 +7,7 @@ import { Avatar, Card, PageHeader, ProgressBar } from '../components/ui';
 import type { ID, TimeEntry } from '../types';
 import { addDays, fmtDate, fmtDateShort, isoWeek, startOfWeek, todayISO, weekdayShort } from '../utils/date';
 import { classNames, fmtNum, sum } from '../utils/format';
+import { dayOff } from '../utils/capacity';
 
 interface Row { key: string; projectId: ID; phaseId: ID | null; planned?: number }
 const rowKey = (projectId: ID, phaseId: ID | null) => `${projectId}:${phaseId ?? '-'}`;
@@ -33,7 +34,7 @@ function DayInput({ value, onCommit, label, weekend }: { value: number; onCommit
 }
 
 export function Timesheet() {
-  const { data, idx, me, refreshSummary } = useStore();
+  const { data, idx, me, refreshSummary, isLead } = useStore();
   const toast = useToast();
   const today = todayISO();
   const [week, setWeek] = useState(startOfWeek(today));
@@ -103,8 +104,9 @@ export function Timesheet() {
 
   const dayTotals = days.map((d) => sum(entries.filter((e) => e.date === d), (e) => e.hours));
   const weekTotal = sum(dayTotals, (h) => h);
-  const target = employee?.weeklyHours || 40;
-  const perDay = target / 5;
+  const perDay = (employee?.weeklyHours || 40) / 5;
+  const offs = days.map((d, i) => (i < 5 && employee ? dayOff(idx.cap, employee.id, d) : null));
+  const target = sum(offs.slice(0, 5), (o) => perDay * (1 - (o?.fraction || 0)));
   const bookable = data.projects.filter((p) => p.status === 'In Bearbeitung' || p.status === 'Beauftragt' || p.status === 'Akquise');
 
   return (
@@ -113,7 +115,7 @@ export function Timesheet() {
         <div className="toolbar">
           <label className="person-select">
             <Avatar employee={employee} size={26} />
-            <select value={empId ?? ''} onChange={(e) => setEmpId(Number(e.target.value))} aria-label="Mitarbeiter">
+            <select value={empId ?? ''} disabled={!isLead} onChange={(e) => setEmpId(Number(e.target.value))} aria-label="Mitarbeiter">
               {data.employees.filter((e) => e.active).sort((a, b) => a.name.localeCompare(b.name, 'de')).map((e) => <option key={e.id} value={e.id}>{e.name}{e.id === me?.id ? ' (ich)' : ''}</option>)}
             </select>
           </label>
@@ -130,7 +132,7 @@ export function Timesheet() {
       <div className="ts-summary">
         <div>
           <span className="muted small">Wochensumme</span>
-          <strong className="ts-total">{fmtNum(weekTotal, 2)} h <span className="muted">/ {fmtNum(target)} h Soll</span></strong>
+          <strong className="ts-total">{fmtNum(weekTotal, 2)} h <span className="muted">/ {fmtNum(target, 1)} h Soll{offs.some(Boolean) ? ' (nach Abwesenheiten)' : ''}</span></strong>
         </div>
         <div className="ts-summary-bar"><ProgressBar value={weekTotal / target} tone={weekTotal > target * 1.1 ? 'amber' : weekTotal >= target * 0.95 ? 'green' : 'blue'} height={8} /></div>
         <div className="muted small">{loading ? 'Lädt …' : weekTotal < target ? `noch ${fmtNum(target - weekTotal, 2)} h offen` : weekTotal > target ? `${fmtNum(weekTotal - target, 2)} h Mehrarbeit` : 'Soll erfüllt'}</div>
@@ -146,6 +148,7 @@ export function Timesheet() {
                 {days.map((d, i) => (
                   <th key={d} className={classNames('ts-day', d === today && 'today', i >= 5 && 'weekend')}>
                     <span>{weekdayShort(d)}</span><small>{fmtDateShort(d)}</small>
+                    {offs[i] && <em className={classNames('ts-off', `abs-${offs[i]!.kind}`)} title={offs[i]!.label}>{offs[i]!.kind === 'holiday' ? 'Feiertag' : offs[i]!.kind}{offs[i]!.fraction < 1 ? ' ½' : ''}</em>}
                   </th>
                 ))}
                 <th className="ts-sum">Summe</th>

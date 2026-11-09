@@ -14,7 +14,13 @@ export interface Employee {
   skills: string[];
   color: string | null;
   active: boolean;
+  login: string | null;
+  appRole: Role | null;
+  vacationDays: number | null;
 }
+
+export type Role = 'admin' | 'leitung' | 'mitarbeiter';
+export const ROLE_LABEL: Record<Role, string> = { admin: 'Administration', leitung: 'Projektleitung / Controlling', mitarbeiter: 'Mitarbeiter/in' };
 
 export const PROJECT_STATUS = ['Akquise', 'Beauftragt', 'In Bearbeitung', 'Pausiert', 'Abgeschlossen'] as const;
 export type ProjectStatus = (typeof PROJECT_STATUS)[number];
@@ -161,10 +167,77 @@ export interface Protocol {
   createdAt: string | null;
 }
 
+export const ABSENCE_TYPES = ['Urlaub', 'Krankheit', 'Fortbildung', 'Gleitzeit', 'Sonderurlaub', 'Sonstiges'] as const;
+export type AbsenceType = (typeof ABSENCE_TYPES)[number];
+
+export interface Absence {
+  id: ID;
+  employeeId: ID | null; // null = alle (Betriebsruhe)
+  type: AbsenceType;
+  startDate: string;
+  endDate: string;
+  halfDay: boolean;
+  status: 'beantragt' | 'genehmigt' | 'abgelehnt';
+  note: string | null;
+  createdBy: ID | null;
+  decidedBy: ID | null;
+}
+
+export interface InvoiceLine {
+  key: string;
+  phaseId?: ID | null;
+  label: string;
+  fee: number;
+  percent: number;
+  amount?: number;
+}
+
+export type InvoiceStatus = 'entwurf' | 'gestellt' | 'bezahlt' | 'storniert';
+
+export interface Invoice {
+  id: ID;
+  projectId: ID;
+  number: number;
+  invoiceNo: string | null;
+  type: 'Abschlagsrechnung' | 'Schlussrechnung' | 'Teilschlussrechnung';
+  date: string;
+  periodEnd: string | null;
+  lines: InvoiceLine[];
+  nkPct: number;
+  vatPct: number;
+  performance: number;
+  nk: number;
+  cumulative: number;
+  previousNet: number;
+  net: number;
+  vat: number;
+  gross: number;
+  status: InvoiceStatus;
+  dueDate: string | null;
+  paidDate: string | null;
+  paidAmount: number | null;
+  note: string | null;
+  createdBy: ID | null;
+}
+
 export interface Settings {
   companyName: string;
   hoursPerDay: number;
   currency: string;
+  state: string;
+  companyAddress: string;
+  bankDetails: string;
+  taxId: string;
+  nkPct: number;
+  vatPct: number;
+  paymentDays: number;
+}
+
+export interface SessionUser {
+  employeeId: ID | null;
+  role: Role;
+  username: string;
+  name: string;
 }
 
 export interface SummaryRow {
@@ -191,8 +264,10 @@ export interface Data {
   allocations: Allocation[];
   costs: CostItem[];
   protocols: Protocol[];
+  absences: Absence[];
+  invoices: Invoice[];
   summary: Summary;
 }
 
-export type Collection = 'employees' | 'projects' | 'phases' | 'milestones' | 'tasks' | 'allocations' | 'costs' | 'protocols';
+export type Collection = 'employees' | 'projects' | 'phases' | 'milestones' | 'tasks' | 'allocations' | 'costs' | 'protocols' | 'absences' | 'invoices';
 export type EntityOf<C extends Collection> = Data[C][number];

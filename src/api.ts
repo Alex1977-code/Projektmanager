@@ -11,7 +11,8 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   try {
     res = await fetch(url, {
       method,
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers: { 'X-Requested-With': 'projektmanager', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+      credentials: 'same-origin',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
@@ -19,6 +20,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   }
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
+  if (res.status === 401 && !url.startsWith('/api/auth/')) window.dispatchEvent(new Event('pm:unauthorized'));
   if (!res.ok) throw new ApiError(res.status, data?.error || `Fehler ${res.status}`);
   return data as T;
 }

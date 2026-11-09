@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { openDb, DB_FILE } from './db.js';
 import { handle, ApiError } from './api.js';
 import { seedIfEmpty } from './seed.js';
+import * as auth from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(__dirname, '..', 'dist');
@@ -15,6 +16,9 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 const db = openDb();
 if (process.env.NO_SEED !== '1') seedIfEmpty(db);
+const authCfg = auth.config();
+if (!['none', 'ldap', 'header'].includes(authCfg.mode)) throw new Error(`Unbekannter AUTH_MODE: ${authCfg.mode}`);
+if (authCfg.mode === 'ldap' && (!authCfg.ldapUrl || !authCfg.ldapBaseDn)) throw new Error('AUTH_MODE=ldap erfordert LDAP_URL und LDAP_BASE_DN');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -63,26 +67,86 @@ function serveStatic(req, res, pathname) {
   fs.createReadStream(file).pipe(res);
 }
 
+const clientIp = (req) => req.socket.remoteAddress || '';
+
+/** Angemeldeten Benutzer ermitteln: Sitzungs-Cookie, sonst (Modus header) Windows-Anmeldung des Proxys. */
+function resolveUser(req) {
+  if (authCfg.mode === 'none') return auth.ANONYMOUS_ADMIN;
+  const s = auth.getSession(db, auth.sessionToken(req));
+  if (s) return s;
+  if (authCfg.mode === 'header' && authCfg.trustedProxies.includes(clientIp(req))) {
+    const remote = req.headers[authCfg.header];
+    if (remote) return auth.mapUser(db, { username: String(remote) }, authCfg);
+  }
+  return null;
+}
+
+async function handleAuth(req, res, action) {
+  const secure = authCfg.cookieSecure || req.headers['x-forwarded-proto'] === 'https';
+  if (action === 'me' && req.method === 'GET') {
+    let user = null;
+    let error = null;
+    try { user = authCfg.mode === 'none' ? null : resolveUser(req); } catch (e) { error = e.message; }
+    return sendJson(res, 200, { mode: authCfg.mode, user, error, adminLogin: !!authCfg.adminPassword });
+  }
+  if (action === 'login' && req.method === 'POST') {
+    const body = (await readBody(req)) || {};
+    const username = String(body.username || '').slice(0, 128);
+    const key = `${clientIp(req)}|${auth.normalizeUsername(username)}`;
+    auth.checkRateLimit(key);
+    let user;
+    try {
+      if (auth.checkAdminPassword(username, body.password, authCfg)) user = auth.ADMIN_USER;
+      else if (authCfg.adminPassword && auth.normalizeUsername(username) === 'admin') throw new auth.AuthError(401, 'Benutzername oder Kennwort ist falsch.');
+      else if (authCfg.mode === 'ldap') user = auth.mapUser(db, await auth.ldapAuthenticate(username, String(body.password || ''), authCfg), authCfg);
+      else if (authCfg.mode === 'header') throw new auth.AuthError(400, 'Die Anmeldung erfolgt automatisch über Windows. Bitte die Seite über den Firmen-Webserver aufrufen.');
+      else throw new auth.AuthError(400, 'Die Anmeldung ist nicht aktiviert (AUTH_MODE=none).');
+    } catch (e) {
+      if (e.status === 401) auth.recordFailure(key);
+      throw e;
+    }
+    auth.clearFailures(key);
+    const token = auth.createSession(db, user, authCfg.sessionHours);
+    res.setHeader('Set-Cookie', auth.sessionCookie(token, secure, authCfg.sessionHours * 3600));
+    console.log(`Anmeldung: ${user.username} (${user.role}) von ${clientIp(req)}`);
+    return sendJson(res, 200, { user });
+  }
+  if (action === 'logout' && req.method === 'POST') {
+    auth.deleteSession(db, auth.sessionToken(req));
+    res.setHeader('Set-Cookie', auth.sessionCookie('', secure, 0));
+    return sendJson(res, 200, { ok: true });
+  }
+  throw new ApiError(404, 'Unbekannte Anmeldefunktion');
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (!url.pathname.startsWith('/api')) return serveStatic(req, res, url.pathname);
   try {
+    const write = !['GET', 'HEAD'].includes(req.method);
+    // Schutz gegen Cross-Site-Request-Forgery: Schreibzugriffe nur mit eigenem Header (setzt die App)
+    if (write && authCfg.mode !== 'none' && req.headers['x-requested-with'] !== 'projektmanager') {
+      throw new ApiError(403, 'Anfrage abgelehnt (fehlender Sicherheitsheader).');
+    }
+    if (url.pathname.startsWith('/api/auth/')) return await handleAuth(req, res, url.pathname.slice('/api/auth/'.length));
+    const user = url.pathname === '/api/health' ? auth.ANONYMOUS_ADMIN : resolveUser(req);
+    if (!user) return sendJson(res, 401, { error: 'Bitte melden Sie sich an.', login: true });
     const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readBody(req) : undefined;
     const query = Object.fromEntries(url.searchParams);
-    const result = await handle(db, req.method, url.pathname, query, body);
+    const result = await handle(db, req.method, url.pathname, query, body, user);
     if (url.pathname === '/api/export') {
       res.setHeader('Content-Disposition', `attachment; filename="projektmanager-export-${new Date().toISOString().slice(0, 10)}.json"`);
     }
     sendJson(res, req.method === 'POST' ? 201 : 200, result);
   } catch (err) {
-    const status = err instanceof ApiError ? err.status : 500;
+    const status = err instanceof ApiError || err instanceof auth.AuthError ? err.status : 500;
     if (status === 500) console.error(err);
     sendJson(res, status, { error: status === 500 ? 'Interner Serverfehler' : err.message });
   }
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Projektmanager-API läuft auf http://localhost:${PORT}  (Datenbank: ${DB_FILE})`);
+  console.log(`Projektmanager-API läuft auf http://localhost:${PORT}  (Datenbank: ${DB_FILE}, Anmeldung: ${authCfg.mode})`);
 });
 
 for (const sig of ['SIGINT', 'SIGTERM']) {

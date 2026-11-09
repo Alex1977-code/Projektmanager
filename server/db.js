@@ -19,6 +19,7 @@ export const SCHEMA = {
     name: 'text', short: 'text', title: 'text', role: 'text', department: 'text',
     email: 'text', phone: 'text', hourlyRate: 'real', weeklyHours: 'real',
     skills: 'json', color: 'text', active: 'bool',
+    login: 'text', appRole: 'text', vacationDays: 'real',
   },
   projects: {
     number: 'text', name: 'text', client: 'text', type: 'text', location: 'text',
@@ -49,6 +50,16 @@ export const SCHEMA = {
     location: 'text', status: 'text', participants: 'json', items: 'json', nextDate: 'text',
     authorId: 'int', createdAt: 'text',
   },
+  absences: {
+    employeeId: 'int', type: 'text', startDate: 'text', endDate: 'text', halfDay: 'bool',
+    status: 'text', note: 'text', createdBy: 'int', decidedBy: 'int',
+  },
+  invoices: {
+    projectId: 'int', number: 'int', invoiceNo: 'text', type: 'text', date: 'text', periodEnd: 'text',
+    lines: 'json', nkPct: 'real', vatPct: 'real', performance: 'real', nk: 'real', cumulative: 'real',
+    previousNet: 'real', net: 'real', vat: 'real', gross: 'real', status: 'text', dueDate: 'text',
+    paidDate: 'text', paidAmount: 'real', note: 'text', createdBy: 'int',
+  },
 };
 
 /** Pflichtfelder je Tabelle (für POST). */
@@ -62,6 +73,8 @@ export const REQUIRED = {
   timeEntries: ['employeeId', 'projectId', 'date', 'hours'],
   costs: ['projectId', 'amount'],
   protocols: ['projectId', 'date'],
+  absences: ['type', 'startDate', 'endDate'],
+  invoices: ['projectId', 'date'],
 };
 
 const SQL_TYPE = { text: 'TEXT', real: 'REAL', int: 'INTEGER', bool: 'INTEGER', json: 'TEXT' };
@@ -87,6 +100,12 @@ export function openDb(file = DB_FILE) {
     CREATE INDEX IF NOT EXISTS ix_tasks_proj ON tasks(projectId);
     CREATE INDEX IF NOT EXISTS ix_phases_proj ON phases(projectId);
     CREATE INDEX IF NOT EXISTS ix_protocols_proj ON protocols(projectId);
+    CREATE INDEX IF NOT EXISTS ix_absences_emp ON absences(employeeId, startDate);
+    CREATE INDEX IF NOT EXISTS ix_invoices_proj ON invoices(projectId, number);
+    CREATE TABLE IF NOT EXISTS sessions (
+      tokenHash TEXT PRIMARY KEY, employeeId INTEGER, role TEXT, username TEXT, name TEXT,
+      createdAt TEXT, expiresAt TEXT
+    );
   `);
   return db;
 }
@@ -209,6 +228,15 @@ export const DEFAULT_SETTINGS = {
   companyName: 'Ingenieurbüro Stahlwasserbau & Bewegliche Brücken',
   hoursPerDay: 8,
   currency: 'EUR',
+  /** Bundesland für gesetzliche Feiertage (ISO-Kürzel ohne DE-) */
+  state: 'HB',
+  /** Rechnungsstellung */
+  companyAddress: 'Musterstraße 1\n28195 Bremen',
+  bankDetails: 'IBAN DE00 0000 0000 0000 0000 00 · BIC XXXXDEXXXXX',
+  taxId: 'USt-IdNr. DE000000000',
+  nkPct: 5,
+  vatPct: 19,
+  paymentDays: 30,
 };
 
 export function getSettings(db) {

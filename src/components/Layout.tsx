@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, CalendarRange, ChevronDown, Clock, CornerDownLeft, FolderKanban, LayoutDashboard,
-  ListChecks, Menu, NotebookPen, Plus, Search, Settings, Users, Gauge, X,
+  ListChecks, LogOut, Menu, NotebookPen, Palmtree, Plus, Receipt, Search, Settings, Users, Gauge, X,
 } from 'lucide-react';
 import { useStore } from '../store';
 import { Avatar } from './ui';
+import { ROLE_LABEL } from '../types';
 import { TaskForm, ProjectForm } from './forms';
 import { classNames } from '../utils/format';
 import { todayISO } from '../utils/date';
@@ -19,11 +20,13 @@ const NAV = [
   { to: '/protokolle', label: 'Protokolle', icon: NotebookPen },
   { to: '/zeiten', label: 'Zeiterfassung', icon: Clock },
   { to: '/controlling', label: 'Kosten & Controlling', icon: BarChart3 },
+  { to: '/rechnungen', label: 'Rechnungen', icon: Receipt, lead: true },
+  { to: '/abwesenheiten', label: 'Abwesenheiten', icon: Palmtree },
   { to: '/team', label: 'Team', icon: Users },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { data, me } = useStore();
+  const { data, me, isLead, isAdmin } = useStore();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [quick, setQuick] = useState<'task' | 'project' | null>(null);
@@ -45,6 +48,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const myOpen = me ? data.tasks.filter((t) => t.assigneeId === me.id && t.status !== 'erledigt') : [];
   const myOverdue = myOpen.filter((t) => t.dueDate && t.dueDate < today).length;
+  const pendingAbs = data.absences.filter((a) => a.status === 'beantragt').length;
 
   return (
     <div className={classNames('app', navOpen && 'nav-open')}>
@@ -60,10 +64,13 @@ export function Layout({ children }: { children: ReactNode }) {
           <button className="icon-btn nav-close" onClick={() => setNavOpen(false)} aria-label="Menü schließen"><X size={18} /></button>
         </div>
         <nav className="nav">
-          {NAV.map((n) => (
+          {NAV.filter((n) => !('lead' in n) || isLead).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
               <n.icon size={18} />
               <span>{n.label}</span>
+              {n.to === '/abwesenheiten' && isLead && pendingAbs > 0 && (
+                <span className="nav-count" title={`${pendingAbs} offene Anträge`}>{pendingAbs}</span>
+              )}
               {n.to === '/aufgaben' && myOpen.length > 0 && (
                 <span className={classNames('nav-count', myOverdue > 0 && 'nav-count-alert')} title={`${myOpen.length} offene Aufgaben, davon ${myOverdue} überfällig`}>{myOpen.length}</span>
               )}
@@ -71,9 +78,9 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="nav-bottom">
-          <NavLink to="/einstellungen" className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
+          {isAdmin && <NavLink to="/einstellungen" className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
             <Settings size={18} /><span>Einstellungen</span>
-          </NavLink>
+          </NavLink>}
         </div>
       </aside>
       <div className="nav-scrim" onClick={() => setNavOpen(false)} />
@@ -89,7 +96,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="topbar-actions">
             <div className="quick-add">
               <button className="btn btn-primary btn-sm" onClick={() => setQuick('task')}><Plus size={16} /> Aufgabe</button>
-              <button className="btn btn-sm" onClick={() => setQuick('project')}><Plus size={16} /> Projekt</button>
+              {isLead && <button className="btn btn-sm" onClick={() => setQuick('project')}><Plus size={16} /> Projekt</button>}
             </div>
             <UserMenu />
           </div>
@@ -105,7 +112,7 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 function UserMenu() {
-  const { data, me, setMeId } = useStore();
+  const { data, me, setMeId, authMode, session, role, logout } = useStore();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -120,12 +127,22 @@ function UserMenu() {
       <button className="user-btn" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open}>
         <Avatar employee={me} size={32} />
         <span className="user-text">
-          <strong>{me?.name || 'Benutzer wählen'}</strong>
-          <small>{me?.role}</small>
+          <strong>{me?.name || session?.name || 'Benutzer wählen'}</strong>
+          <small>{me?.role || ROLE_LABEL[role]}</small>
         </span>
         <ChevronDown size={16} />
       </button>
-      {open && (
+      {open && authMode !== 'none' && (
+        <div className="dropdown">
+          <div className="dropdown-head">Angemeldet</div>
+          <div className="dropdown-user">
+            <strong>{session?.name}</strong>
+            <small>{session?.username} · {ROLE_LABEL[role]}</small>
+          </div>
+          <button className="dropdown-item" onClick={() => { setOpen(false); logout(); }}><LogOut size={16} /> <span><strong>Abmelden</strong></span></button>
+        </div>
+      )}
+      {open && authMode === 'none' && (
         <div className="dropdown" role="listbox">
           <div className="dropdown-head">Angemeldet als …</div>
           <div className="dropdown-scroll">

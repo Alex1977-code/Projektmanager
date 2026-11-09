@@ -8,7 +8,7 @@ import { projectMetrics } from '../utils/metrics';
 import type { Milestone, Phase } from '../types';
 
 export function Schedule() {
-  const { data, idx, update } = useStore();
+  const { data, idx, update, isLead } = useStore();
   const [scale, setScale] = useState<GanttScale>('month');
   const [scope, setScope] = useState<'laufend' | 'alle'>('laufend');
   const [lead, setLead] = useState('');
@@ -57,7 +57,7 @@ export function Schedule() {
           bars: [{
             id: `ph${ph.id}`, start: ph.startDate, end: ph.endDate, color: p.color || '#475569', progress: (ph.progress || 0) / 100,
             label: ph.code || '', tooltip: `${ph.code} ${ph.name}`, onClick: () => setEditPhase(ph),
-            onChange: (s, e) => update('phases', ph.id, { startDate: s, endDate: e }),
+            onChange: isLead ? (s, e) => update('phases', ph.id, { startDate: s, endDate: e }) : undefined,
           }],
         });
       }

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { openDb, insert, transaction, setSettings, DB_FILE } from './db.js';
 import { seedProtocols } from './seedProtocols.js';
+import { availability, buildAbsences, seedInvoices } from './seedExtra.js';
 
 // ---------------------------------------------------------------- Hilfsfunktionen
 function mulberry32(seed) {
@@ -192,9 +193,23 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
       const row = insert(db, 'employees', {
         name, short, title, role, department, hourlyRate, weeklyHours, skills, email,
         phone: `+49 421 55 60-${String(100 + i * 3)}`, color: COLORS[i % COLORS.length], active: true,
+        login: email.split('@')[0].replace(/^(\w)\w*\./, '$1.'),
+        appRole: i === 0 ? 'admin' : keys.includes('pl') || keys.includes('office') ? 'leitung' : 'mitarbeiter',
+        vacationDays: weeklyHours >= 30 ? 30 : 15,
       });
       return { ...row, keys };
     });
+
+    // Abwesenheiten (eigener Zufallsgenerator, damit die übrigen Demodaten stabil bleiben)
+    const absences = buildAbsences(todayIso, mulberry32(4711), EMPLOYEES.length);
+    for (const a of absences) {
+      insert(db, 'absences', {
+        employeeId: a.emp === null ? null : emps[a.emp].id, type: a.type, startDate: a.start, endDate: a.end,
+        halfDay: !!a.halfDay, status: a.status, note: a.note, createdBy: a.emp === null ? emps[0].id : emps[a.emp].id,
+        decidedBy: a.status === 'genehmigt' ? emps[0].id : null,
+      });
+    }
+    const invoiceProjects = [];
 
     const memberFor = (team, key, leadIdx) => {
       const cands = team.filter((i) => EMPLOYEES[i][7].includes(key));
@@ -241,6 +256,7 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
         });
         return { ...phase, hi };
       });
+      invoiceProjects.push({ project, phases });
 
       // Meilensteine
       const ms = [['Auftragserteilung', startDate]];
@@ -347,6 +363,7 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
     });
 
     seedProtocols(db, { byNumber, emp: (i) => emps[i].id, today: todayIso });
+    seedInvoices(db, { projects: invoiceProjects, today: todayIso, rand: mulberry32(815), authorOf: (pr) => pr.leadId });
 
     // Ressourcenplanung: Kapazität jedes Mitarbeiters je Woche auf seine Projekte verteilen
     const empWeeks = new Map();
@@ -361,7 +378,7 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
     for (const { mi, weekStart, w, projects } of empWeeks.values()) {
       const cap = EMPLOYEES[mi][6];
       const horizon = w > 10 ? Math.max(0.35, 1 - (w - 10) * 0.05) : 1; // Planung wird nach hinten dünner
-      const target = cap * utilBias[mi] * horizon * (0.92 + rand() * 0.16) * (EMPLOYEES[mi][7].includes('gf') ? 0.4 : 1);
+      const target = cap * availability(absences, mi, weekStart) * utilBias[mi] * horizon * (0.92 + rand() * 0.16) * (EMPLOYEES[mi][7].includes('gf') ? 0.4 : 1);
       const weights = projects.map((p) => (p.lead ? 1.5 : 1));
       const ws = weights.reduce((a, b) => a + b, 0);
       projects.forEach((p, k) => {

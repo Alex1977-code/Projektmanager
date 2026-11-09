@@ -5,6 +5,7 @@ import type { Allocation, Employee, ID } from '../types';
 import { Avatar } from './ui';
 import { addDays, fmtDateShort, isoWeek, todayISO } from '../utils/date';
 import { classNames, fmtNum } from '../utils/format';
+import { reasonSummary, weekCapacity, type WeekCapacity } from '../utils/capacity';
 
 export function utilClass(hours: number, capacity: number) {
   if (hours <= 0) return 'util-0';
@@ -15,7 +16,7 @@ export function utilClass(hours: number, capacity: number) {
   return 'util-low';
 }
 
-function HoursInput({ value, onCommit, title }: { value: number; onCommit: (v: number) => void; title?: string }) {
+function HoursInput({ value, onCommit, title, disabled }: { value: number; onCommit: (v: number) => void; title?: string; disabled?: boolean }) {
   const [text, setText] = useState(value ? fmtNum(value, 1) : '');
   useEffect(() => setText(value ? fmtNum(value, 1) : ''), [value]);
   const commit = () => {
@@ -38,9 +39,21 @@ function HoursInput({ value, onCommit, title }: { value: number; onCommit: (v: n
     }
   };
   return (
-    <input className="hours-input" inputMode="decimal" value={text} placeholder="·" title={title}
+    <input className="hours-input" inputMode="decimal" value={text} placeholder="·" title={title} readOnly={disabled}
       onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={onKey} onFocus={(e) => e.target.select()} aria-label={title} />
   );
+}
+
+function capTitle(name: string, w: string, h: number, wc: WeekCapacity) {
+  const u = wc.hours > 0 ? Math.round((h / wc.hours) * 100) : null;
+  const reasons = wc.reasons.map((r) => `  ${r.date.slice(8, 10)}.${r.date.slice(5, 7)}. ${r.label}${r.fraction < 1 ? ' (½ Tag)' : ''}${r.pending ? ' – beantragt' : ''}`).join('\n');
+  return `${name} · KW ${isoWeek(w)}\nGeplant: ${fmtNum(h, 1)} h · verfügbar: ${fmtNum(wc.hours, 1)} von ${fmtNum(wc.nominal)} h${u !== null ? ` (${u} %)` : ''}${reasons ? `\nNicht verfügbar:\n${reasons}` : ''}`;
+}
+
+function OffMark({ wc }: { wc: WeekCapacity }) {
+  if (!wc.offDays) return null;
+  const pending = wc.reasons.some((r) => r.pending);
+  return <span className={classNames('rg-off', pending && 'pending')} aria-label={reasonSummary(wc)}>−{String(wc.offDays).replace('.', ',')} T</span>;
 }
 
 function WeekHead({ weeks }: { weeks: string[] }) {
@@ -80,7 +93,7 @@ function useAllocIndex(weeks: string[]) {
 
 // ============================================================ Teamansicht (alle Mitarbeiter)
 export function ResourceGrid({ weeks, employees, showAbsolute }: { weeks: string[]; employees: Employee[]; showAbsolute: boolean }) {
-  const { data, idx, setAllocation } = useStore();
+  const { data, idx, setAllocation, isLead } = useStore();
   const ai = useAllocIndex(weeks);
   const [open, setOpen] = useState<Set<ID>>(new Set());
   const [extra, setExtra] = useState<Record<ID, ID[]>>({});
@@ -93,7 +106,7 @@ export function ResourceGrid({ weeks, employees, showAbsolute }: { weeks: string
     let cap = 0;
     for (const e of employees) {
       planned += ai.byEmpWeek.get(`${e.id}|${w}`) || 0;
-      cap += e.weeklyHours || 0;
+      cap += weekCapacity(idx.cap, e, w).hours;
     }
     return { planned, cap };
   });
@@ -129,12 +142,17 @@ export function ResourceGrid({ weeks, employees, showAbsolute }: { weeks: string
                   <td className="rg-cap">{fmtNum(cap)} h</td>
                   {weeks.map((w) => {
                     const h = ai.byEmpWeek.get(`${e.id}|${w}`) || 0;
-                    const u = cap > 0 ? h / cap : 0;
+                    const wc = weekCapacity(idx.cap, e, w);
+                    const avail = wc.hours;
+                    const u = avail > 0 ? h / avail : h > 0 ? 9.99 : 0;
+                    const absent = avail === 0 && wc.nominal > 0;
                     return (
-                      <td key={w} className={classNames('rg-cell', utilClass(h, cap))} onClick={() => !isOpen && toggle(e.id)}
-                        title={`${e.name} · KW ${isoWeek(w)}\nGeplant: ${fmtNum(h, 1)} h von ${fmtNum(cap)} h (${Math.round(u * 100)} %)`}>
-                        {h > 0 ? (showAbsolute ? `${fmtNum(h, 1)}` : `${Math.round(u * 100)}%`) : ''}
+                      <td key={w} className={classNames('rg-cell', absent && h === 0 ? 'rg-absent' : utilClass(h, avail))} onClick={() => !isOpen && toggle(e.id)}
+                        title={capTitle(e.name, w, h, wc)}>
+                        {absent && h === 0 ? <span className="rg-absent-label">{wc.reasons[0]?.kind === 'holiday' ? 'Feiertag' : wc.reasons[0]?.label.split(' ')[0]}</span>
+                          : h > 0 ? (showAbsolute || absent ? `${fmtNum(h, 1)}${absent ? ' h' : ''}` : `${Math.round(u * 100)}%`) : ''}
                         {u > 1.0001 && <AlertTriangle size={11} className="rg-over-icon" aria-label="überplant" />}
+                        {!absent && <OffMark wc={wc} />}
                       </td>
                     );
                   })}
@@ -153,14 +171,14 @@ export function ResourceGrid({ weeks, employees, showAbsolute }: { weeks: string
                       <td className="rg-cap" />
                       {weeks.map((w) => (
                         <td key={w} className="rg-input-cell">
-                          <HoursInput value={ai.byEmpProjWeek.get(`${e.id}|${pid}|${w}`) || 0} title={`${p.number} · KW ${isoWeek(w)}`}
+                          <HoursInput value={ai.byEmpProjWeek.get(`${e.id}|${pid}|${w}`) || 0} title={`${p.number} · KW ${isoWeek(w)}`} disabled={!isLead}
                             onCommit={(v) => setAllocation(e.id, pid, w, v)} />
                         </td>
                       ))}
                     </tr>
                   );
                 })}
-                {isOpen && (
+                {isOpen && isLead && (
                   <tr className="rg-proj rg-add">
                     <td className="rg-name" colSpan={2}>
                       <label className="rg-add-select">
@@ -200,7 +218,7 @@ export function ResourceGrid({ weeks, employees, showAbsolute }: { weeks: string
 
 // ============================================================ Projektansicht
 export function ProjectResourceGrid({ projectId, weeks }: { projectId: ID; weeks: string[] }) {
-  const { data, idx, setAllocation } = useStore();
+  const { data, idx, setAllocation, isLead } = useStore();
   const ai = useAllocIndex(weeks);
   const [extra, setExtra] = useState<ID[]>([]);
   const project = idx.projectById.get(projectId);
@@ -237,13 +255,14 @@ export function ProjectResourceGrid({ projectId, weeks }: { projectId: ID; weeks
                 <td className="rg-cap">{fmtNum(cap)} h</td>
                 {weeks.map((w) => {
                   const total = ai.byEmpWeek.get(`${e.id}|${w}`) || 0;
-                  const u = cap ? total / cap : 0;
+                  const wc = weekCapacity(idx.cap, e, w);
+                  const u = wc.hours ? total / wc.hours : total ? 9.99 : 0;
                   return (
-                    <td key={w} className="rg-input-cell rg-with-load">
-                      <HoursInput value={ai.byEmpProjWeek.get(`${e.id}|${projectId}|${w}`) || 0} title={`${e.name} · KW ${isoWeek(w)}`}
+                    <td key={w} className={classNames('rg-input-cell rg-with-load', wc.hours === 0 && 'rg-absent-cell')}>
+                      <HoursInput value={ai.byEmpProjWeek.get(`${e.id}|${projectId}|${w}`) || 0} title={`${e.name} · KW ${isoWeek(w)}`} disabled={!isLead}
                         onCommit={(v) => setAllocation(e.id, projectId, w, v)} />
-                      <span className={classNames('rg-load', utilClass(total, cap))} title={`Gesamtauslastung über alle Projekte: ${fmtNum(total, 1)} h (${Math.round(u * 100)} %)`}>
-                        {total > 0 ? `${Math.round(u * 100)}%` : '–'}
+                      <span className={classNames('rg-load', wc.hours === 0 ? 'rg-absent' : utilClass(total, wc.hours))} title={`Gesamtauslastung über alle Projekte\n${capTitle(e.name, w, total, wc)}`}>
+                        {wc.hours === 0 ? 'abwesend' : total > 0 ? `${Math.round(u * 100)}%` : '–'}{wc.offDays > 0 && wc.hours > 0 ? ` · −${String(wc.offDays).replace('.', ',')} T` : ''}
                       </span>
                     </td>
                   );
@@ -254,7 +273,7 @@ export function ProjectResourceGrid({ projectId, weeks }: { projectId: ID; weeks
           {emps.length === 0 && (
             <tr><td colSpan={weeks.length + 2} className="rg-empty">Noch niemand eingeplant. Fügen Sie unten Teammitglieder hinzu.</td></tr>
           )}
-          <tr className="rg-proj rg-add">
+          {isLead && <tr className="rg-proj rg-add">
             <td className="rg-name" colSpan={2}>
               <label className="rg-add-select">
                 <Plus size={14} />
@@ -266,7 +285,7 @@ export function ProjectResourceGrid({ projectId, weeks }: { projectId: ID; weeks
               </label>
             </td>
             <td colSpan={weeks.length} className="rg-add-hint">Oben: Projektstunden · darunter: Gesamtauslastung der Person über alle Projekte</td>
-          </tr>
+          </tr>}
         </tbody>
         <tfoot>
           <tr>

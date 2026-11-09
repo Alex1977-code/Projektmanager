@@ -3,12 +3,21 @@ import { api } from './api';
 import type { Allocation, Collection, Data, Employee, EntityOf, ID, Settings, Summary, Task } from './types';
 import { buildIndex, type Index } from './utils/metrics';
 import { useToast } from './components/Toast';
+import { useAuth } from './auth';
+import type { Role, SessionUser } from './types';
 
 interface Store {
   data: Data;
   idx: Index;
   me: Employee | null;
   setMeId: (id: ID) => void;
+  /** angemeldeter Benutzer (null ohne Anmeldung) */
+  session: SessionUser | null;
+  authMode: 'none' | 'ldap' | 'header';
+  role: Role;
+  isLead: boolean;
+  isAdmin: boolean;
+  logout: () => Promise<void>;
   create: <C extends Collection>(c: C, obj: Partial<EntityOf<C>>) => Promise<EntityOf<C>>;
   update: <C extends Collection>(c: C, id: ID, patch: Partial<EntityOf<C>>) => Promise<EntityOf<C> | undefined>;
   remove: <C extends Collection>(c: C, id: ID) => Promise<boolean>;
@@ -34,6 +43,7 @@ function readMe(): ID | null {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const toast = useToast();
+  const auth = useAuth();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [meId, setMeIdState] = useState<ID | null>(readMe);
@@ -159,9 +169,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const me = useMemo(() => {
     if (!data) return null;
+    if (auth.mode !== 'none') return data.employees.find((e) => e.id === auth.user?.employeeId) || null;
     const active = data.employees.filter((e) => e.active);
     return active.find((e) => e.id === meId) || active.find((e) => e.role?.startsWith('Projektleiter')) || active[0] || null;
-  }, [data, meId]);
+  }, [data, meId, auth.mode, auth.user]);
 
   if (error && !data) {
     return (
@@ -183,7 +194,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  const value: Store = { data, idx, me, setMeId, create, update, remove, setAllocation, createTasks, refreshSummary, reload, saveSettings };
+  const role: Role = auth.mode === 'none' ? 'admin' : auth.user?.role || 'mitarbeiter';
+  const value: Store = {
+    session: auth.user, authMode: auth.mode, role, isLead: role === 'admin' || role === 'leitung', isAdmin: role === 'admin', logout: auth.logout,
+    data, idx, me, setMeId, create, update, remove, setAllocation, createTasks, refreshSummary, reload, saveSettings };
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 

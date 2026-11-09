@@ -1,5 +1,6 @@
 // Kennzahlen für Projektcontrolling (Earned-Value-Methode, vereinfachtes Modell).
-import type { CostItem, Data, Employee, ID, Milestone, Phase, Project, Task } from '../types';
+import type { CostItem, Data, Employee, ID, Invoice, Milestone, Phase, Project, Task } from '../types';
+import { buildCapacityIndex, type CapacityIndex } from './capacity';
 import { clamp, groupBy, sum } from './format';
 import { diffDays, todayISO } from './date';
 
@@ -16,6 +17,8 @@ export interface Index {
   actualByPhase: Map<string, { hours: number; cost: number }>;
   actualByProject: Map<ID, { hours: number; cost: number }>;
   actualByTask: Map<ID, number>;
+  cap: CapacityIndex;
+  invoicesByProject: Map<ID, Invoice[]>;
 }
 
 export const phaseKey = (projectId: ID, phaseId: ID | null | undefined) => `${projectId}:${phaseId ?? '-'}`;
@@ -45,6 +48,8 @@ export function buildIndex(data: Data): Index {
     actualByPhase,
     actualByProject,
     actualByTask: new Map(data.summary.byTask.map((r) => [r.taskId, r.hours])),
+    cap: buildCapacityIndex(data.absences, data.settings.state || 'HB'),
+    invoicesByProject: groupBy([...data.invoices].sort((a, b) => a.number - b.number), (i) => i.projectId),
   };
 }
 

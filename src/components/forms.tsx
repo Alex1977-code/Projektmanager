@@ -6,7 +6,7 @@ import { Modal, useConfirm } from './Modal';
 import { Field } from './ui';
 import {
   COST_CATEGORIES, PRIORITIES, PROJECT_STATUS, PROJECT_TYPES, TASK_STATUS, TASK_STATUS_LABEL,
-  type CostItem, type Employee, type ID, type Milestone, type Phase, type Project, type Task,
+  ROLE_LABEL, type CostItem, type Employee, type ID, type Milestone, type Phase, type Project, type Role, type Task,
 } from '../types';
 import { addDays, addMonths, todayISO } from '../utils/date';
 import { HOAI_PHASES, planPhases } from '../utils/hoai';
@@ -395,12 +395,13 @@ export function EmployeeForm({ employee, onClose }: { employee?: Employee; onClo
     hourlyRate: str(employee?.hourlyRate ?? 95), weeklyHours: str(employee?.weeklyHours ?? 40),
     skills: (employee?.skills || []).join(', '), color: employee?.color ?? AVATAR_COLORS[data.employees.length % AVATAR_COLORS.length],
     active: employee?.active ?? true,
+    login: employee?.login ?? '', appRole: (employee?.appRole ?? 'mitarbeiter') as Role, vacationDays: str(employee?.vacationDays ?? 30),
   });
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const short = v.short || v.name.split(/\s+/).map((p) => p[0]).join('').slice(0, 3).toUpperCase();
     const payload: Partial<Employee> = {
-      ...v, short, hourlyRate: num(v.hourlyRate), weeklyHours: num(v.weeklyHours),
+      ...v, short, hourlyRate: num(v.hourlyRate), weeklyHours: num(v.weeklyHours), vacationDays: num(v.vacationDays), login: v.login.trim().toLowerCase() || null,
       skills: v.skills.split(',').map((s) => s.trim()).filter(Boolean),
     };
     try {
@@ -443,7 +444,15 @@ export function EmployeeForm({ employee, onClose }: { employee?: Employee; onClo
           </div>
         </Field>
         <Field label="Qualifikationen (kommagetrennt)" span={2}><input value={v.skills} onChange={(e) => set('skills', e.target.value)} placeholder="FEM, DIN 19704, Tekla …" /></Field>
+        <Field label="Urlaubsanspruch (Tage/Jahr)"><input inputMode="decimal" value={v.vacationDays} onChange={(e) => set('vacationDays', e.target.value)} /></Field>
         <label className="check-field"><input type="checkbox" checked={v.active} onChange={(e) => set('active', e.target.checked)} /> Aktiv (in Planung verfügbar)</label>
+        <div className="field-span2 form-section">Anmeldung</div>
+        <Field label="Windows-Anmeldename" hint="sAMAccountName im Active Directory, z. B. s.hartmann"><input value={v.login} onChange={(e) => set('login', e.target.value)} placeholder="vorname.nachname" autoComplete="off" /></Field>
+        <Field label="Berechtigung" hint="Wird überschrieben, wenn AD-Gruppen konfiguriert sind">
+          <select value={v.appRole} onChange={(e) => set('appRole', e.target.value as Role)}>
+            {(Object.keys(ROLE_LABEL) as Role[]).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+          </select>
+        </Field>
       </form>
     </Modal>
   );

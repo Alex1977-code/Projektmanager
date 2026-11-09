@@ -4,11 +4,12 @@ import { useStore } from '../store';
 import { Card, Kpi, PageHeader, Segmented } from '../components/ui';
 import { ResourceGrid } from '../components/ResourceGrid';
 import { DEPARTMENTS } from '../components/forms';
-import { addDays, fmtDate, isoWeek, todayISO, weeksBetween } from '../utils/date';
+import { addDays, isoWeek, todayISO, weeksBetween } from '../utils/date';
 import { fmtNum, fmtPct, sum } from '../utils/format';
+import { weekCapacity } from '../utils/capacity';
 
 export function Resources() {
-  const { data } = useStore();
+  const { data, idx } = useStore();
   const [offset, setOffset] = useState(0);
   const [count, setCount] = useState<'8' | '12' | '26'>('12');
   const [dept, setDept] = useState('');
@@ -34,15 +35,17 @@ export function Resources() {
     .filter((e) => e.active)
     .filter((e) => !dept || e.department === dept)
     .filter((e) => !q || `${e.name} ${e.role} ${e.skills.join(' ')}`.toLowerCase().includes(q.toLowerCase()))
-    .filter((e) => !onlyOver || (loadOf.get(e.id) || []).some((h) => h > (e.weeklyHours || 0)))
+    .filter((e) => !onlyOver || (loadOf.get(e.id) || []).some((h, i) => h > weekCapacity(idx.cap, e, weeks[i]).hours))
     .sort((a, b) => (a.department || '').localeCompare(b.department || '') || a.name.localeCompare(b.name, 'de'));
 
   const allActive = data.employees.filter((e) => e.active);
-  const capWeek = sum(allActive, (e) => e.weeklyHours);
   const first4 = weeks.slice(0, 4);
+  const cap4 = (e: (typeof allActive)[number]) => first4.map((w) => weekCapacity(idx.cap, e, w).hours);
+  const capTotal4 = sum(allActive, (e) => sum(cap4(e), (h) => h));
+  const nominal4 = sum(allActive, (e) => (e.weeklyHours || 0) * first4.length);
   const planned4 = sum(allActive, (e) => sum((loadOf.get(e.id) || []).slice(0, 4), (h) => h));
-  const overCount = allActive.filter((e) => (loadOf.get(e.id) || []).slice(0, 4).some((h) => h > (e.weeklyHours || 0))).length;
-  const free4 = sum(allActive, (e) => sum((loadOf.get(e.id) || []).slice(0, 4), (h) => Math.max(0, (e.weeklyHours || 0) - h)));
+  const overCount = allActive.filter((e) => { const c = cap4(e); return (loadOf.get(e.id) || []).slice(0, 4).some((h, i) => h > c[i] + 0.01); }).length;
+  const free4 = sum(allActive, (e) => sum(cap4(e).map((ch, i) => Math.max(0, ch - ((loadOf.get(e.id) || [])[i] || 0))), (x) => x));
 
   return (
     <div className="page">
@@ -69,11 +72,11 @@ export function Resources() {
       </PageHeader>
 
       <div className="kpi-grid kpi-grid-4">
-        <Kpi label={`Auslastung KW ${isoWeek(first4[0])}–${isoWeek(first4[first4.length - 1])}`} value={fmtPct(planned4 / Math.max(1, capWeek * first4.length))}
-          sub={`${fmtNum(planned4)} h geplant von ${fmtNum(capWeek * first4.length)} h`} />
+        <Kpi label={`Auslastung KW ${isoWeek(first4[0])}–${isoWeek(first4[first4.length - 1])}`} value={fmtPct(planned4 / Math.max(1, capTotal4))}
+          sub={`${fmtNum(planned4)} h geplant von ${fmtNum(capTotal4)} h verfügbar`} />
         <Kpi label="Freie Kapazität (4 Wochen)" value={`${fmtNum(free4)} h`} sub="Summe nicht verplanter Stunden" />
         <Kpi label="Überplante Personen" value={overCount} tone={overCount ? 'bad' : 'good'} icon={overCount ? <AlertTriangle size={18} /> : undefined} sub="in den ersten 4 Wochen des Zeitraums" />
-        <Kpi label="Planungszeitraum" value={`${weeks.length} Wochen`} sub={`${fmtDate(weeks[0])} – ${fmtDate(addDays(weeks[weeks.length - 1], 6))}`} />
+        <Kpi label="Abwesenheit (4 Wochen)" value={`${fmtNum(nominal4 - capTotal4)} h`} sub={`Urlaub, Feiertage, Krankheit u. a. · ${fmtPct((nominal4 - capTotal4) / Math.max(1, nominal4))} der Sollzeit`} />
       </div>
 
       <Card padded={false}>
@@ -83,6 +86,8 @@ export function Resources() {
           <span><i className="util-ok" /> 50–85 %</span>
           <span><i className="util-high" /> 85–100 %</span>
           <span><i className="util-over" /> <AlertTriangle size={12} /> über 100 % (überplant)</span>
+          <span><i className="rg-absent" /> ganz abwesend</span>
+          <span><span className="rg-off static">−2 T</span> Tage abwesend / Feiertag (Prozent bezogen auf verfügbare Zeit)</span>
         </div>
       </Card>
     </div>

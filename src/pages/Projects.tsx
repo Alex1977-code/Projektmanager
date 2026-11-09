@@ -17,7 +17,7 @@ function readView(): 'table' | 'cards' {
 }
 
 export function Projects() {
-  const { data, idx } = useStore();
+  const { data, idx, isLead } = useStore();
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<StatusFilter>('laufend');
@@ -55,7 +55,7 @@ export function Projects() {
   return (
     <div className="page">
       <PageHeader title="Projekte" subtitle={`${data.projects.length} Projekte · ${counts.laufend} laufend`}
-        actions={<button className="btn btn-primary" onClick={() => setCreating(true)}><Plus size={16} /> Neues Projekt</button>}>
+        actions={isLead ? <button className="btn btn-primary" onClick={() => setCreating(true)}><Plus size={16} /> Neues Projekt</button> : undefined}>
         <div className="toolbar">
           <div className="search-input">
             <Search size={16} />

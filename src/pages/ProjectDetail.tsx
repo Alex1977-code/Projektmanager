@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, BookOpenCheck, Building2, Calendar, ChevronLeft, ChevronRight, Flag, MapPin, Pencil, Plus, Receipt, User } from 'lucide-react';
+import { ArrowLeft, BookOpenCheck, Building2, FilePlus2, Calendar, ChevronLeft, ChevronRight, Flag, MapPin, Pencil, Plus, Receipt, User } from 'lucide-react';
 import { useStore } from '../store';
 import { AmpelBadge, Avatar, Card, EmptyState, Kpi, PageHeader, PriorityTag, ProgressBar, ProjectStatusBadge, Segmented, TaskStatusBadge } from '../components/ui';
 import { CostForm, MilestoneForm, PhaseForm, ProjectForm, TaskForm } from '../components/forms';
@@ -8,6 +8,8 @@ import { Gantt, ganttRange, type GanttRow, type GanttScale } from '../components
 import { KanbanBoard } from '../components/Kanban';
 import { TemplateDialog } from '../components/TemplateDialog';
 import { NewProtocolDialog, OpenPointsTable, ProtocolTable } from '../components/Protocols';
+import { InvoiceTable, useCreateInvoice } from '../components/Invoices';
+import { billingStatus } from '../utils/invoices';
 import { ProjectResourceGrid } from '../components/ResourceGrid';
 import { BulletBar, BulletLegend } from '../components/Charts';
 import { phaseKey, phaseMetrics, projectMetrics, type ProjectMetrics } from '../utils/metrics';
@@ -15,19 +17,20 @@ import { addDays, diffDays, fmtDate, relDays, startOfWeek, todayISO, weeksBetwee
 import { classNames, fmtEur, fmtEurCompact, fmtEurSigned, fmtHours, fmtNum, fmtPct, sum } from '../utils/format';
 import type { CostItem, Milestone, Phase, Project, Task, TaskStatus } from '../types';
 
-type Tab = 'uebersicht' | 'termine' | 'aufgaben' | 'ressourcen' | 'kosten' | 'protokolle';
+type Tab = 'uebersicht' | 'termine' | 'aufgaben' | 'ressourcen' | 'kosten' | 'rechnungen' | 'protokolle';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'uebersicht', label: 'Übersicht' },
   { id: 'termine', label: 'Terminplan' },
   { id: 'aufgaben', label: 'Aufgaben' },
   { id: 'ressourcen', label: 'Ressourcen' },
   { id: 'kosten', label: 'Kosten' },
+  { id: 'rechnungen', label: 'Rechnungen' },
   { id: 'protokolle', label: 'Protokolle' },
 ];
 
 export function ProjectDetail() {
   const { id } = useParams();
-  const { data, idx } = useStore();
+  const { data, idx, isLead } = useStore();
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
   const project = idx.projectById.get(Number(id));
@@ -61,10 +64,10 @@ export function ProjectDetail() {
             <span><Calendar size={14} /> {fmtDate(project.startDate)} – {fmtDate(project.endDate)}</span>
           </span>
         }
-        actions={<button className="btn" onClick={() => setEditing(true)}><Pencil size={16} /> Bearbeiten</button>}
+        actions={isLead ? <button className="btn" onClick={() => setEditing(true)}><Pencil size={16} /> Bearbeiten</button> : undefined}
       >
         <nav className="tabs" role="tablist">
-          {TABS.map((t) => (
+          {TABS.filter((t) => t.id !== 'rechnungen' || isLead).map((t) => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} className={classNames('tab', tab === t.id && 'active')}
               onClick={() => setParams(t.id === 'uebersicht' ? {} : { tab: t.id }, { replace: true })}>
               {t.label}
@@ -81,6 +84,7 @@ export function ProjectDetail() {
       {tab === 'ressourcen' && <ProjectResources project={project} />}
       {tab === 'kosten' && <ProjectCosts project={project} m={m} />}
       {tab === 'protokolle' && <ProjectProtocols project={project} />}
+      {tab === 'rechnungen' && isLead && <ProjectInvoices project={project} />}
 
       {editing && <ProjectForm project={project} onClose={() => setEditing(false)} />}
     </div>
@@ -89,7 +93,7 @@ export function ProjectDetail() {
 
 // ======================================================================= Übersicht
 function Overview({ project, m, tasks }: { project: Project; m: ProjectMetrics; tasks: Task[] }) {
-  const { data, idx, update } = useStore();
+  const { data, idx, update, isLead } = useStore();
   const [, setParams] = useSearchParams();
   const [editPhase, setEditPhase] = useState<Phase | null>(null);
   const [editMs, setEditMs] = useState<Milestone | 'new' | null>(null);
@@ -136,7 +140,7 @@ function Overview({ project, m, tasks }: { project: Project; m: ProjectMetrics; 
                     const pm = phaseMetrics(ph, idx);
                     const active = ph.startDate <= today && ph.endDate >= today;
                     return (
-                      <tr key={ph.id} className={classNames('clickable', active && 'row-active')} onClick={() => setEditPhase(ph)}>
+                      <tr key={ph.id} className={classNames(isLead && 'clickable', active && 'row-active')} onClick={() => isLead && setEditPhase(ph)}>
                         <td><strong>{ph.code}</strong> {ph.name}{active && <span className="tag-mini tag-blue">aktuell</span>}</td>
                         <td className="nowrap small">{fmtDate(ph.startDate)} – {fmtDate(ph.endDate)}</td>
                         <td className="num">{fmtEurCompact(ph.budget)}</td>
@@ -209,7 +213,7 @@ function Overview({ project, m, tasks }: { project: Project; m: ProjectMetrics; 
 const TASK_COLOR: Record<TaskStatus, string> = { offen: '#94a3b8', in_arbeit: '#2563eb', pruefung: '#d97706', erledigt: '#16a34a' };
 
 function Schedule({ project }: { project: Project }) {
-  const { idx, update } = useStore();
+  const { idx, update, isLead } = useStore();
   const [scale, setScale] = useState<GanttScale>('month');
   const [open, setOpen] = useState<Set<number>>(new Set());
   const [editPhase, setEditPhase] = useState<Phase | 'new' | null>(null);
@@ -247,7 +251,7 @@ function Schedule({ project }: { project: Project }) {
       bars: [{
         id: `ph${ph.id}`, start: ph.startDate, end: ph.endDate, color, progress: (ph.progress || 0) / 100, label: ph.code || ph.name, tooltip: `${ph.code} ${ph.name}`,
         onClick: () => setEditPhase(ph),
-        onChange: (s, e) => update('phases', ph.id, { startDate: s, endDate: e }),
+        onChange: isLead ? (s, e) => update('phases', ph.id, { startDate: s, endDate: e }) : undefined,
       }],
     });
     if (isOpen) {
@@ -290,7 +294,7 @@ function Schedule({ project }: { project: Project }) {
           <button className="btn btn-sm btn-ghost" onClick={() => setOpen(open.size ? new Set() : new Set(phases.map((p) => p.id)))}>{open.size ? 'Aufgaben einklappen' : 'Aufgaben anzeigen'}</button>
           <Segmented value={scale} onChange={setScale} options={[{ value: 'week', label: 'Wochen' }, { value: 'month', label: 'Monate' }, { value: 'quarter', label: 'Quartale' }]} />
           <button className="btn btn-sm" onClick={() => setEditMs('new')}><Flag size={14} /> Meilenstein</button>
-          <button className="btn btn-sm btn-primary" onClick={() => setEditPhase('new')}><Plus size={14} /> Phase</button>
+          {isLead && <button className="btn btn-sm btn-primary" onClick={() => setEditPhase('new')}><Plus size={14} /> Phase</button>}
         </>
       }>
       <Gantt rows={rows} from={range.from} to={range.to} scale={scale} labelHeader="Leistungsphase / Aufgabe" />
@@ -343,6 +347,30 @@ function ProjectTasks({ project, tasks }: { project: Project; tasks: Task[] }) {
   );
 }
 
+// ======================================================================= Rechnungen
+function ProjectInvoices({ project }: { project: Project }) {
+  const { idx } = useStore();
+  const createInvoice = useCreateInvoice();
+  const invoices = idx.invoicesByProject.get(project.id) || [];
+  const b = billingStatus(project, idx);
+  const budget = project.budget || 0;
+  return (
+    <>
+      <div className="kpi-grid">
+        <Kpi label="Honorar" value={fmtEurCompact(budget)} sub="laut Vertrag (netto, ohne NK)" />
+        <Kpi label="Leistung erbracht" value={fmtEurCompact(b.earned)} sub={`${fmtPct(b.earned / Math.max(1, budget))} nach Fertigstellungsgrad`} />
+        <Kpi label="Abgerechnet" value={fmtEurCompact(b.billedPerformance)} sub={`${fmtPct(b.billedPerformance / Math.max(1, budget))} der Leistung · netto inkl. NK ${fmtEurCompact(b.billedNet)}`} />
+        <Kpi label="Noch abzurechnen" value={fmtEurCompact(b.unbilled)} tone={b.unbilled > 20000 ? 'warn' : 'default'} sub="erbracht, aber nicht in Rechnung gestellt" />
+        <Kpi label="Offene Posten" value={fmtEurCompact(b.openGross)} tone={b.overdue ? 'bad' : 'default'} sub={b.overdue ? `${b.overdue} Rechnung(en) überfällig` : `bezahlt ${fmtEurCompact(b.paid)}`} />
+      </div>
+      <Card title="Abschlagsrechnungen" subtitle="Nach § 15 HOAI auf Basis des nachgewiesenen Leistungsstands je Leistungsphase" padded={false}
+        actions={<button className="btn btn-sm btn-primary" onClick={() => createInvoice(project)}><FilePlus2 size={14} /> Abschlagsrechnung erstellen</button>}>
+        <InvoiceTable invoices={invoices} />
+      </Card>
+    </>
+  );
+}
+
 // ======================================================================= Protokolle
 function ProjectProtocols({ project }: { project: Project }) {
   const { data } = useStore();
@@ -382,7 +410,7 @@ function ProjectResources({ project }: { project: Project }) {
 
 // ======================================================================= Kosten
 function ProjectCosts({ project, m }: { project: Project; m: ProjectMetrics }) {
-  const { data, idx } = useStore();
+  const { data, idx, isLead } = useStore();
   const [editCost, setEditCost] = useState<CostItem | 'new' | null>(null);
   const [editPhase, setEditPhase] = useState<Phase | null>(null);
   const phases = idx.phasesByProject.get(project.id) || [];
@@ -472,7 +500,7 @@ function ProjectCosts({ project, m }: { project: Project; m: ProjectMetrics }) {
 
       <div className="detail-grid">
         <Card title="Fremd- und Sachkosten" subtitle={`Angefallen ${fmtEur(m.extCost)} · geplant (Obligo) ${fmtEur(m.extCostPlanned)}`} padded={false}
-          actions={<button className="btn btn-sm btn-primary" onClick={() => setEditCost('new')}><Plus size={14} /> Kosten erfassen</button>}>
+          actions={isLead ? <button className="btn btn-sm btn-primary" onClick={() => setEditCost('new')}><Plus size={14} /> Kosten erfassen</button> : undefined}>
           {costs.length === 0 ? <EmptyState icon={<Receipt size={20} />} title="Keine Fremdkosten erfasst" /> : (
             <table className="table table-hover">
               <thead><tr><th>Datum</th><th>Bezeichnung</th><th>Kategorie</th><th>Phase</th><th className="num">Betrag</th><th>Status</th></tr></thead>

@@ -7,9 +7,11 @@ import { BulletBar, UtilizationChart } from '../components/Charts';
 import { TaskForm } from '../components/forms';
 import { isActiveProject, projectMetrics } from '../utils/metrics';
 import { addDays, fmtDate, fmtDateShort, isoWeek, relDays, todayISO, weekdayShort, weeksBetween } from '../utils/date';
+import { Palmtree } from 'lucide-react';
 import { classNames, fmtEurCompact, fmtNum, fmtPct, sum } from '../utils/format';
 import type { Task } from '../types';
 import { sortTasks } from '../components/Kanban';
+import { dayOff, weekCapacity } from '../utils/capacity';
 
 export function Dashboard() {
   const { data, idx, me, update } = useStore();
@@ -21,8 +23,13 @@ export function Dashboard() {
   const metrics = useMemo(() => new Map(data.projects.map((p) => [p.id, projectMetrics(p, idx, today)])), [data.projects, idx, today]);
 
   const weeks = weeksBetween(today, 12);
-  const capacity = sum(data.employees.filter((e) => e.active), (e) => e.weeklyHours);
-  const util = weeks.map((w) => ({ week: w, planned: sum(data.allocations.filter((a) => a.weekStart === w), (a) => a.hours), capacity }));
+  const activeEmps = data.employees.filter((e) => e.active);
+  const capacity = sum(activeEmps, (e) => e.weeklyHours);
+  const util = weeks.map((w) => ({ week: w, planned: sum(data.allocations.filter((a) => a.weekStart === w), (a) => a.hours), capacity: sum(activeEmps, (e) => weekCapacity(idx.cap, e, w).hours) }));
+  // Wer ist heute bzw. in dieser Woche nicht da?
+  const absentThisWeek = activeEmps.map((e) => ({ e, days: weeks[0] ? [0, 1, 2, 3, 4].map((i) => ({ d: addDays(weeks[0], i), o: dayOff(idx.cap, e.id, addDays(weeks[0], i)) })).filter((x) => x.o && x.o.kind !== 'holiday') : [] }))
+    .filter((x) => x.days.length);
+  const holidaysThisWeek = [0, 1, 2, 3, 4].map((i) => addDays(weeks[0], i)).map((d) => ({ d, o: activeEmps[0] ? dayOff(idx.cap, activeEmps[0].id, d) : null })).filter((x) => x.o?.kind === 'holiday');
   const next4 = util.slice(0, 4);
   const util4 = sum(next4, (u) => u.planned) / Math.max(1, sum(next4, (u) => u.capacity));
 
@@ -38,12 +45,16 @@ export function Dashboard() {
   const bottlenecks = useMemo(() => {
     const out: { id: number; name: string; weeks: { w: string; u: number }[] }[] = [];
     for (const e of data.employees.filter((x) => x.active)) {
-      const ws = weeks.slice(0, 4).map((w) => ({ w, u: sum(data.allocations.filter((a) => a.employeeId === e.id && a.weekStart === w), (a) => a.hours) / Math.max(1, e.weeklyHours || 0) }));
+      const ws = weeks.slice(0, 4).map((w) => {
+        const h = sum(data.allocations.filter((a) => a.employeeId === e.id && a.weekStart === w), (a) => a.hours);
+        const c = weekCapacity(idx.cap, e, w).hours;
+        return { w, u: c > 0 ? h / c : h > 0 ? 9.99 : 0 };
+      });
       const over = ws.filter((x) => x.u > 1.0001);
       if (over.length) out.push({ id: e.id, name: e.name, weeks: over });
     }
     return out.sort((a, b) => Math.max(...b.weeks.map((x) => x.u)) - Math.max(...a.weeks.map((x) => x.u)));
-  }, [data.allocations, data.employees, weeks]);
+  }, [data.allocations, data.employees, weeks, idx.cap]);
 
   const hour = new Date().getHours();
   const greet = hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
@@ -130,7 +141,7 @@ export function Dashboard() {
           </div>
         </Card>
 
-        <Card title="Teamauslastung" subtitle={`Geplante Stunden je Woche im Verhältnis zur Kapazität (${fmtNum(capacity)} h/Woche)`} className="span-2"
+        <Card title="Teamauslastung" subtitle={`Geplante Stunden je Woche im Verhältnis zur verfügbaren Kapazität (Soll ${fmtNum(capacity)} h/Woche abzüglich Urlaub, Feiertagen und weiterer Abwesenheiten)`} className="span-2"
           actions={<Link to="/ressourcen" className="btn btn-sm btn-ghost">Ressourcenplanung</Link>}>
           <UtilizationChart data={util} />
         </Card>
@@ -183,8 +194,28 @@ export function Dashboard() {
           )}
         </Card>
 
+        <Card title="Abwesenheiten diese Woche" subtitle={holidaysThisWeek.length ? `Feiertag: ${holidaysThisWeek.map((h) => `${weekdayShort(h.d)} ${fmtDateShort(h.d)} ${h.o!.label}`).join(', ')}` : `KW ${isoWeek(today)}`} padded={false}
+          actions={<Link to="/abwesenheiten" className="btn btn-sm btn-ghost">Kalender</Link>}>
+          {absentThisWeek.length === 0 ? <EmptyState icon={<Palmtree size={22} />} title="Alle an Bord" text="Keine Abwesenheiten in dieser Woche." /> : (
+            <ul className="team-list">
+              {absentThisWeek.map(({ e, days }) => {
+                const first = days[0];
+                const last = days[days.length - 1];
+                const pending = days.some((x) => x.o!.pending);
+                return (
+                  <li key={e.id}>
+                    <Avatar employee={e} size={28} />
+                    <div><strong>{e.name}</strong><small>{first.o!.label}{pending ? ' (beantragt)' : ''} · {weekdayShort(first.d)}{days.length > 1 ? `–${weekdayShort(last.d)}` : ''}{days.some((x) => x.o!.fraction < 1) ? ' (½ Tag)' : ''}</small></div>
+                    <span className={classNames('abs-chip', `abs-${first.o!.kind}`)}>{first.o!.kind}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+
         {bottlenecks.length > 0 && (
-          <Card title="Kapazitätsengpässe" subtitle="Überplante Personen in den nächsten 4 Wochen" className="span-2" padded={false}
+          <Card title="Kapazitätsengpässe" subtitle="Überplante Personen in den nächsten 4 Wochen" padded={false}
             actions={<Link to="/ressourcen" className="btn btn-sm btn-ghost">Ausgleichen</Link>}>
             <div className="bottlenecks">
               {bottlenecks.map((b) => (
@@ -192,7 +223,7 @@ export function Dashboard() {
                   <Avatar employee={idx.employeeById.get(b.id)} size={30} />
                   <div>
                     <strong>{b.name}</strong>
-                    <small>{b.weeks.map((x) => `KW ${isoWeek(x.w)}: ${Math.round(x.u * 100)} %`).join(' · ')}</small>
+                    <small>{b.weeks.map((x) => `KW ${isoWeek(x.w)}: ${x.u > 9 ? 'abwesend, aber eingeplant' : `${Math.round(x.u * 100)} %`}`).join(' · ')}</small>
                   </div>
                   <AmpelBadge value="bad" label="Überplant" />
                 </div>
