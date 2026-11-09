@@ -20,7 +20,7 @@ export const SCHEMA = {
   projects: {
     number: 'text', name: 'text', client: 'text', type: 'text', location: 'text',
     leadId: 'int', status: 'text', priority: 'text', startDate: 'text', endDate: 'text',
-    budget: 'real', description: 'text', color: 'text', extNo: 'text',
+    budget: 'real', description: 'text', color: 'text', extNo: 'text', debitorId: 'int',
   },
   phases: {
     projectId: 'int', code: 'text', name: 'text', startDate: 'text', endDate: 'text',
@@ -40,6 +40,7 @@ export const SCHEMA = {
   costs: {
     projectId: 'int', phaseId: 'int', date: 'text', category: 'text',
     description: 'text', amount: 'real', status: 'text',
+    kreditorId: 'int', docNo: 'text', vatPct: 'real', dueDate: 'text', paidDate: 'text', exportedAt: 'text',
   },
   protocols: {
     projectId: 'int', number: 'int', title: 'text', type: 'text', date: 'text', time: 'text',
@@ -54,7 +55,7 @@ export const SCHEMA = {
     projectId: 'int', number: 'int', invoiceNo: 'text', type: 'text', date: 'text', periodEnd: 'text',
     lines: 'json', nkPct: 'real', vatPct: 'real', performance: 'real', nk: 'real', cumulative: 'real',
     previousNet: 'real', net: 'real', vat: 'real', gross: 'real', status: 'text', dueDate: 'text',
-    paidDate: 'text', paidAmount: 'real', note: 'text', createdBy: 'int',
+    paidDate: 'text', paidAmount: 'real', note: 'text', createdBy: 'int', exportedAt: 'text',
   },
   roles: { key: 'text', name: 'text', description: 'text', permissions: 'json', system: 'bool', sort: 'int' },
   worktimes: {
@@ -78,6 +79,16 @@ export const SCHEMA = {
     projectId: 'int', offerId: 'int', positionKey: 'text', code: 'text', title: 'text', description: 'text',
     phaseId: 'int', responsibleId: 'int', plannedHours: 'real', budget: 'real', startDate: 'text', endDate: 'text',
     status: 'text', progress: 'real', sort: 'real',
+  },
+  /** Geschäftspartner: Debitoren (Auftraggeber) und Kreditoren (Lieferanten, Nachunternehmer) */
+  contacts: {
+    kind: 'text', number: 'text', name: 'text', addition: 'text', street: 'text', zip: 'text', city: 'text', country: 'text',
+    vatId: 'text', email: 'text', phone: 'text', iban: 'text', paymentDays: 'int', note: 'text', active: 'bool',
+  },
+  /** Interne Nachrichten; Antworten tragen die ID der ersten Nachricht in threadId */
+  messages: {
+    fromId: 'int', toIds: 'json', subject: 'text', body: 'text', link: 'text', linkLabel: 'text',
+    threadId: 'int', createdAt: 'text', readBy: 'json', hiddenBy: 'json',
   },
   /** Dateien für Druckvorlagen (Briefbogen erste Seite / Folgeseiten) als Data-URL */
   assets: { key: 'text', name: 'text', mime: 'text', data: 'text', updatedAt: 'text' },
@@ -103,6 +114,8 @@ export const REQUIRED = {
   offers: ['projectId', 'date'],
   workPackages: ['projectId', 'title'],
   assets: ['key', 'data'],
+  contacts: ['kind', 'name'],
+  messages: ['fromId', 'body'],
 };
 
 
@@ -237,6 +250,13 @@ export const DEFAULT_SETTINGS = {
     accent: '#0b1f3a',
     topFirst: 45, topNext: 28, bottom: 30, left: 25, right: 18,
     foldMarks: true,
+  },
+  /** Debitoren-/Kreditoren-Schnittstelle (Format wie Abacus-Export: Trennzeichen, Datum, Zeichensatz von dort) */
+  accounting: {
+    revenueAccount: '8400', debitorAccount: '1400', kreditorAccount: '1600',
+    vatCode: 'U19', inputVatCode: 'V19', defaultExpenseAccount: '3100',
+    expenseAccounts: { Fremdleistung: '3100', Vermessung: '3110', 'Prüfingenieur': '3120', 'Prüfung & Versuche': '3130', Reisekosten: '4660', 'Software / Lizenzen': '4964', Sonstiges: '4900' },
+    debitorStart: 10000, kreditorStart: 70000,
   },
   /** interne Stufe für einmalige Datenanpassungen */
   dataLevel: 0,

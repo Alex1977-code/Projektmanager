@@ -69,3 +69,34 @@ export function seedOffers(db, { today, rand }) {
     insert(db, 'offers', { ...base, ...computeOffer(base), status: i ? 'abgelehnt' : 'versendet', offerNo: no(date), sentAt: date, decidedAt: i ? addDays(date, 30) : null });
   });
 }
+
+/** Kreditoren mit Belegen an den Fremdkosten sowie einige interne Nachrichten. */
+export function seedAccounting(db, { today }) {
+  const KREDITOREN = {
+    Fremdleistung: ['Geotechnik Nord GmbH', 'Hafenstraße 12', '27568', 'Bremerhaven'],
+    'Prüfingenieur': ['Prüfingenieure Dr. Albers + Partner', 'Wallring 4', '28195', 'Bremen'],
+    Vermessung: ['Vermessungsbüro Tiede', 'Deichweg 21', '26919', 'Brake'],
+    Reisekosten: ['Reisestelle (Sammelkreditor)', '', '', ''],
+    'Prüfung & Versuche': ['Werkstoffprüfung Küste GmbH', 'Am Dock 7', '26382', 'Wilhelmshaven'],
+  };
+  const ids = new Map();
+  Object.entries(KREDITOREN).forEach(([cat, [name, street, zip, city]], i) => {
+    ids.set(cat, insert(db, 'contacts', { kind: 'kreditor', number: String(70001 + i), name, street, zip, city, country: 'DE', paymentDays: 30, active: true }).id);
+  });
+  let n = 0;
+  for (const c of list(db, 'costs')) {
+    if (c.status !== 'angefallen' || !ids.has(c.category)) continue;
+    n += 1;
+    // jede sechste Position bleibt unvollständig – Beispiel für die Warnung bei der Übergabe
+    update(db, 'costs', c.id, { kreditorId: ids.get(c.category), docNo: n % 6 === 0 ? null : `ER-${String(c.date || today).slice(0, 4)}-${String(1000 + n)}`, vatPct: 19 });
+  }
+  const emps = list(db, 'employees');
+  const at = (d, h) => `${addDays(today, d)}T${String(h).padStart(2, '0')}:15:00.000Z`;
+  if (emps.length > 6) {
+    const [gf, pl1, pl2, , , ing] = emps;
+    const m1 = insert(db, 'messages', { fromId: gf.id, toIds: [pl1.id, pl2.id], subject: 'Angebotsvolumen 4. Quartal', body: 'Bitte schaut euch die offenen Angebote an – bei zweien läuft die Bindefrist bald ab. Können wir bis Freitag nachfassen?', link: '/controlling?tab=angebote', linkLabel: 'Auswertung Angebote', threadId: null, createdAt: at(-2, 9), readBy: [gf.id], hiddenBy: [] });
+    insert(db, 'messages', { fromId: pl2.id, toIds: [gf.id, pl1.id], subject: 'Angebotsvolumen 4. Quartal', body: 'Ich übernehme die Hubbrücke und melde mich nach dem Telefonat.', link: null, linkLabel: null, threadId: m1.id, createdAt: at(-2, 11), readBy: [pl2.id, gf.id], hiddenBy: [] });
+    insert(db, 'messages', { fromId: ing.id, toIds: [pl1.id], subject: 'Stunden LPH 3 fast aufgebraucht', body: 'Die Planstunden im Arbeitspaket Berechnung sind zu 95 % verbraucht, es fehlen aber noch die Nachweise für die Riegel. Wie gehen wir vor?', link: '/controlling?tab=arbeitspakete', linkLabel: 'Nachkalkulation', threadId: null, createdAt: at(-1, 14), readBy: [ing.id], hiddenBy: [] });
+    insert(db, 'messages', { fromId: pl1.id, toIds: [ing.id], subject: 'Prüfbericht Statik', body: 'Der Prüfbericht liegt im Projektordner. Danke für die schnelle Zuarbeit!', link: null, linkLabel: null, threadId: null, createdAt: at(-5, 16), readBy: [pl1.id, ing.id], hiddenBy: [] });
+  }
+}

@@ -39,6 +39,7 @@ export const PERMISSION_GROUPS = [
       ['offers.edit', 'Angebote erstellen, versenden und beauftragen'],
       ['invoices.view', 'Rechnungen einsehen'],
       ['invoices.edit', 'Rechnungen erstellen, stellen und stornieren'],
+      ['accounting.export', 'Debitoren und Kreditoren pflegen und an die Buchhaltung übergeben'],
     ],
   },
   {
@@ -62,7 +63,7 @@ export const DEFAULT_ROLES = [
   },
   {
     key: 'controlling', name: 'Controlling / Buchhaltung', description: 'Finanzen, Arbeitszeitfreigabe und Abacus-Übergabe.', system: false,
-    permissions: ['tasks.edit', 'protocols.edit', 'absences.approve', 'absences.details', 'time.all', 'worktime.approve', 'abacus.export', 'costs.view', 'costs.edit', 'offers.view', 'offers.edit', 'invoices.view', 'invoices.edit'],
+    permissions: ['tasks.edit', 'protocols.edit', 'absences.approve', 'absences.details', 'time.all', 'worktime.approve', 'abacus.export', 'costs.view', 'costs.edit', 'offers.view', 'offers.edit', 'invoices.view', 'invoices.edit', 'accounting.export'],
   },
   { key: 'mitarbeiter', name: 'Mitarbeiter/in', description: 'Bearbeitet Aufgaben und Protokolle, erfasst eigene Zeiten.', system: true, permissions: ['tasks.edit', 'protocols.edit'] },
   { key: 'extern', name: 'Werkstudent/in / Extern', description: 'Sieht Projekte, erfasst nur eigene Zeiten.', system: false, permissions: [] },

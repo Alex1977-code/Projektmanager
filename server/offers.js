@@ -1,6 +1,7 @@
 // Angebote (angebotene Leistungen), Arbeitspakete und Druckvorlagen-Dateien.
 import { list, get, insert, update, remove, transaction, getSettings, updateWhere } from './core.js';
 import { ApiError } from './errors.js';
+import { migrateAccounting } from './accounting.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -205,12 +206,15 @@ export function handleAssets(db, method, key, body, can) {
 /** Einmalige Anpassung bestehender Datenbanken: neue Rechte an die Standardrollen geben. */
 export function migrateData(db) {
   const level = Number(getSettings(db).dataLevel) || 0;
-  if (level >= 1) return false;
-  for (const r of list(db, 'roles')) {
-    if ((r.key === 'leitung' || r.key === 'controlling') && Array.isArray(r.permissions) && r.permissions.includes('invoices.view') && !r.permissions.includes('offers.view')) {
-      update(db, 'roles', r.id, { permissions: [...r.permissions, 'offers.view', 'offers.edit'] });
+  if (level >= 2) return false;
+  if (level < 1) {
+    for (const r of list(db, 'roles')) {
+      if ((r.key === 'leitung' || r.key === 'controlling') && Array.isArray(r.permissions) && r.permissions.includes('invoices.view') && !r.permissions.includes('offers.view')) {
+        update(db, 'roles', r.id, { permissions: [...r.permissions, 'offers.view', 'offers.edit'] });
+      }
     }
   }
-  db.settingSet('dataLevel', 1);
+  migrateAccounting(db);
+  db.settingSet('dataLevel', 2);
   return true;
 }

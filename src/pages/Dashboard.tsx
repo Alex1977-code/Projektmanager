@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Briefcase, CalendarClock, Check, ChevronRight, ClipboardCheck, Clock, Flag, Gauge, Palmtree as PalmIcon, Receipt, Send, Wallet } from 'lucide-react';
+import { AlertTriangle, Briefcase, CalendarClock, Check, ChevronRight, ClipboardCheck, Clock, Flag, Mail, Gauge, Palmtree as PalmIcon, Receipt, Send, Wallet } from 'lucide-react';
 import { useStore } from '../store';
 import { AmpelBadge, Avatar, Card, EmptyState, Kpi, PageHeader, PriorityTag, ProgressBar } from '../components/ui';
 import { BulletBar, UtilizationChart } from '../components/Charts';
@@ -64,7 +64,7 @@ export function Dashboard() {
   // ---- Heute: Stempeluhr und offene Vorgänge
   const own = useOwnWorktimes(me?.id);
   const todos = useMemo(() => {
-    const out: { key: string; tone: 'warn' | 'bad' | 'info'; icon: 'send' | 'clock' | 'check' | 'palm' | 'receipt'; text: string; sub?: string; to: string }[] = [];
+    const out: { key: string; tone: 'warn' | 'bad' | 'info'; icon: 'send' | 'clock' | 'check' | 'palm' | 'receipt' | 'mail'; text: string; sub?: string; to: string }[] = [];
     const month = today.slice(0, 7);
     const prev = addMonths(`${month}-01`, -1).slice(0, 7);
     const statusOf = (empId: number, m: string) => data.worktimeMonths.find((x) => x.employeeId === empId && x.month === m)?.status || 'offen';
@@ -74,6 +74,10 @@ export function Dashboard() {
       }
       const gaps = statusOf(me.id, month) === 'offen' ? monthRows(me, month, own.list, idx.cap, today, new Map()).filter((r) => r.missing).length : 0;
       if (gaps) out.push({ key: 'gaps', tone: 'warn', icon: 'clock', text: `${gaps} Arbeitstag${gaps > 1 ? 'e' : ''} ohne Zeiteintrag`, sub: `${monthLong(`${month}-01`)} – Zeit oder Abwesenheit nachtragen`, to: '/arbeitszeit' });
+    }
+    if (me) {
+      const n = (data.messages || []).filter((m) => m.toIds.includes(me.id) && !m.readBy.includes(me.id) && !(m.hiddenBy || []).includes(me.id)).length;
+      if (n) out.push({ key: 'msg', tone: 'info', icon: 'mail', text: `${n} ungelesene Nachricht${n > 1 ? 'en' : ''}`, sub: 'Interne Mitteilungen', to: '/nachrichten' });
     }
     if (can('worktime.approve')) {
       const n = data.worktimeMonths.filter((m) => m.status === 'eingereicht' && m.employeeId !== me?.id);
@@ -91,8 +95,8 @@ export function Dashboard() {
       if (n) out.push({ key: 'inv', tone: 'bad', icon: 'receipt', text: `${n} Rechnung${n > 1 ? 'en' : ''} überfällig`, sub: 'Zahlungseingang prüfen', to: '/rechnungen' });
     }
     return out;
-  }, [data.worktimeMonths, data.absences, data.invoices, me, own.list, idx.cap, today, can]);
-  const todoIcon = { send: <Send size={14} />, clock: <Clock size={14} />, check: <ClipboardCheck size={14} />, palm: <PalmIcon size={14} />, receipt: <Receipt size={14} /> };
+  }, [data.worktimeMonths, data.absences, data.invoices, data.messages, me, own.list, idx.cap, today, can]);
+  const todoIcon = { send: <Send size={14} />, clock: <Clock size={14} />, check: <ClipboardCheck size={14} />, palm: <PalmIcon size={14} />, receipt: <Receipt size={14} />, mail: <Mail size={14} /> };
   const monthLocked = me ? (data.worktimeMonths.find((x) => x.employeeId === me.id && x.month === today.slice(0, 7))?.status || 'offen') !== 'offen' : false;
 
   const hour = new Date().getHours();

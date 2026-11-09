@@ -458,3 +458,96 @@ test('Angebote und Vorlagen: Rechte', () => {
   const inv = handle(db, 'POST', '/api/invoices', {}, { projectId: p.id, date: '2026-05-01', lines: [{ key: 'a', label: 'L', fee: 100, percent: 100 }], nkPct: 0, vatPct: 19 });
   assert.equal(handle(db, 'PUT', `/api/invoices/${inv.id}`, {}, { status: 'gestellt' }).invoiceNo, '2026-01-R');
 });
+
+// ---------------------------------------------------------------- Debitoren, Kreditoren, Nachrichten, Auswertung
+test('Debitoren/Kreditoren: Nummern, Übergabe der Belege, Storno, Zahlungsabgleich', () => {
+  const db = fresh();
+  seedRoles(db);
+  const deb = handle(db, 'POST', '/api/contacts', {}, { kind: 'debitor', name: 'WSA Nord', city: 'Bremen' });
+  const kre = handle(db, 'POST', '/api/contacts', {}, { kind: 'kreditor', name: 'Vermessung Tiede' });
+  assert.deepEqual([deb.number, kre.number], ['10000', '70000']);
+  assert.throws(() => handle(db, 'POST', '/api/contacts', {}, { kind: 'debitor', name: 'X', number: '10000' }), (e) => e.status === 409);
+  const p = handle(db, 'POST', '/api/projects', {}, { name: 'Wehr', number: 'P-1', extNo: '4711', debitorId: deb.id });
+  const p2 = handle(db, 'POST', '/api/projects', {}, { name: 'Ohne Debitor', number: 'P-2' });
+  const mk = (pid, date) => {
+    const i = handle(db, 'POST', '/api/invoices', {}, { projectId: pid, date, lines: [{ key: 'a', label: 'L', fee: 1000, percent: 100 }], nkPct: 0, vatPct: 19 });
+    return handle(db, 'PUT', `/api/invoices/${i.id}`, {}, { status: 'gestellt' });
+  };
+  const i1 = mk(p.id, '2026-03-10');
+  mk(p2.id, '2026-03-11');
+  const pre = handle(db, 'POST', '/api/accounting/export', {}, { type: 'debitorenBelege', preview: true });
+  assert.equal(pre.count, 1);
+  assert.match(pre.warnings[0], /Kein Debitor zugeordnet.*P-2/);
+  const out = handle(db, 'POST', '/api/accounting/export', {}, { type: 'debitorenBelege' });
+  const lines = out.content.replace('﻿', '').trim().split('\r\n');
+  assert.equal(lines[0], 'Mandant;Belegart;Belegnummer;Belegdatum;Faelligkeit;Debitor;Name;Sammelkonto;Erloeskonto;Steuercode;Netto;USt;Brutto;Kostentraeger;Text');
+  assert.equal(lines[1], ';RE;RE-2026-001;10.03.2026;09.04.2026;10000;WSA Nord;1400;8400;U19;1000,00;190,00;1190,00;4711;Abschlagsrechnung 1 Wehr');
+  assert.equal(handle(db, 'POST', '/api/accounting/export', {}, { type: 'debitorenBelege', preview: true }).count, 0, 'bereits übergeben');
+  handle(db, 'PUT', `/api/invoices/${i1.id}`, {}, { status: 'storniert' });
+  const st = handle(db, 'POST', '/api/accounting/export', {}, { type: 'debitorenBelege' });
+  assert.match(st.content, /;ST;RE-2026-001;.*;-1000,00;-190,00;-1190,00;/, 'Storno als Gegenbuchung');
+  assert.equal(handle(db, 'POST', '/api/accounting/export', {}, { type: 'debitorenBelege', preview: true }).count, 0, 'Storno nur einmal');
+
+  // Kreditoren-Belege: nur vollständige, angefallene Kosten
+  handle(db, 'POST', '/api/costs', {}, { projectId: p.id, amount: 500, date: '2026-04-01', category: 'Vermessung', description: 'Aufmaß', status: 'angefallen', kreditorId: kre.id, docNo: 'ER-77' });
+  handle(db, 'POST', '/api/costs', {}, { projectId: p.id, amount: 300, date: '2026-04-02', category: 'Reisekosten', status: 'angefallen' });
+  const k = handle(db, 'POST', '/api/accounting/export', {}, { type: 'kreditorenBelege' });
+  assert.equal(k.count, 1);
+  assert.match(k.content, /;ER;ER-77;01\.04\.2026;01\.05\.2026;70000;Vermessung Tiede;1600;3110;V19;500,00;95,00;595,00;4711;Vermessung Aufmaß/);
+  assert.match(k.warnings[0], /1 angefallene Kostenposition/);
+  assert.match(handle(db, 'POST', '/api/accounting/export', {}, { type: 'kreditoren' }).content, /70000;Vermessung Tiede/);
+  assert.throws(() => handle(db, 'DELETE', `/api/contacts/${kre.id}`, {}), (e) => e.status === 409, 'verwendeter Kreditor');
+  assert.throws(() => handle(db, 'POST', '/api/accounting/export', {}, { type: 'debitoren' }, { employeeId: 1, role: 'leitung' }), (e) => e.status === 403);
+
+  // Zahlungsabgleich
+  const i3 = mk(p.id, '2026-05-01');
+  const csv = `Konto;Beleg;Valuta;Betrag\r\n1400;${i3.invoiceNo};15.05.2026;1.190,00\r\n1400;UNBEKANNT;16.05.2026;50,00\r\n`;
+  const prev = handle(db, 'POST', '/api/accounting/payments', {}, { text: csv });
+  assert.deepEqual(prev.matches.map((m) => [m.invoiceNo, m.date, m.amount, m.result]), [[i3.invoiceNo, '2026-05-15', 1190, 'bezahlt']]);
+  assert.equal(prev.unmatched, 1);
+  assert.equal(handle(db, 'GET', `/api/invoices/${i3.id}`, {}).status, 'gestellt', 'Vorschau ändert nichts');
+  assert.equal(handle(db, 'POST', '/api/accounting/payments', {}, { text: csv, apply: true }).applied, 1);
+  assert.equal(handle(db, 'GET', `/api/invoices/${i3.id}`, {}).status, 'bezahlt');
+});
+
+test('Nachrichten: nur Beteiligte lesen, Antworten im Verlauf, gelesen/ausgeblendet', () => {
+  const db = fresh();
+  seedRoles(db);
+  const [a, b, c] = ['A', 'B', 'C'].map((name) => handle(db, 'POST', '/api/employees', {}, { name }));
+  const ua = { employeeId: a.id, role: 'mitarbeiter' }; const ub = { employeeId: b.id, role: 'mitarbeiter' }; const uc = { employeeId: c.id, role: 'mitarbeiter' };
+  const m = handle(db, 'POST', '/api/messages', {}, { toIds: [b.id, a.id], subject: 'Hallo', body: 'Text', link: 'https://example.org', actorId: c.id }, ua);
+  assert.deepEqual([m.fromId, m.toIds, m.link, m.readBy], [a.id, [b.id], null, [a.id]], 'Absender ist die angemeldete Person, externe Verweise werden verworfen');
+  assert.throws(() => handle(db, 'POST', '/api/messages', {}, { toIds: [], body: 'x' }, ua), (e) => e.status === 400);
+  assert.equal(handle(db, 'GET', '/api/messages', {}, null, ub).length, 1);
+  assert.equal(handle(db, 'GET', '/api/messages', {}, null, uc).length, 0, 'Unbeteiligte sehen nichts');
+  assert.equal(handle(db, 'GET', '/api/bootstrap', {}, null, uc).messages.length, 0);
+  assert.throws(() => handle(db, 'POST', '/api/messages', {}, { toIds: [a.id], body: 'r', threadId: m.id }, uc), (e) => e.status === 404);
+  const r = handle(db, 'POST', '/api/messages', {}, { toIds: [a.id], body: 'Antwort', threadId: m.id, link: '/controlling?tab=angebote', linkLabel: 'Angebote' }, ub);
+  assert.deepEqual([r.threadId, r.link], [m.id, '/controlling?tab=angebote']);
+  handle(db, 'POST', '/api/messages/read', {}, { ids: [m.id] }, ub);
+  assert.deepEqual(handle(db, 'GET', '/api/messages', {}, null, ub).find((x) => x.id === m.id).readBy.sort(), [a.id, b.id].sort());
+  handle(db, 'POST', '/api/messages/hide', {}, { ids: [m.id] }, ub);
+  assert.deepEqual(handle(db, 'GET', '/api/messages', {}, null, ub).map((x) => x.id), [r.id], 'ausgeblendet nur für B');
+  assert.equal(handle(db, 'GET', '/api/messages', {}, null, ua).length, 2);
+  // ohne Anmeldung: handelnde Person aus dem gewählten Profil
+  assert.equal(handle(db, 'POST', '/api/messages', {}, { toIds: [a.id], body: 'x', actorId: c.id }).fromId, c.id);
+  assert.equal(handle(db, 'GET', '/api/messages', { employeeId: String(c.id) }).length, 1);
+});
+
+test('Auswertung Stunden: verdichtet je Monat, eigene Zeiten ohne Recht, Debitoren aus Auftraggebern', async () => {
+  const db = fresh();
+  seedRoles(db);
+  const p = handle(db, 'POST', '/api/projects', {}, { name: 'P', client: 'Stadtwerke' });
+  handle(db, 'POST', '/api/projects', {}, { name: 'Q', client: 'stadtwerke ' });
+  const [a, b] = ['A', 'B'].map((name) => handle(db, 'POST', '/api/employees', {}, { name, hourlyRate: 100 }));
+  for (const [e, date, hours] of [[a, '2026-01-10', 4], [a, '2026-01-20', 2], [a, '2026-02-01', 1], [b, '2026-01-11', 8]]) handle(db, 'POST', '/api/timeEntries', {}, { employeeId: e.id, projectId: p.id, date, hours });
+  const all = handle(db, 'GET', '/api/reports/hours', { from: '2026-01-01', to: '2026-12-31' });
+  assert.deepEqual(all.map((r) => [r.month, r.employeeId, r.hours, r.cost]).sort(), [['2026-01', a.id, 6, 600], ['2026-01', b.id, 8, 800], ['2026-02', a.id, 1, 100]].sort());
+  const own = handle(db, 'GET', '/api/reports/hours', {}, null, { employeeId: a.id, role: 'mitarbeiter' });
+  assert.deepEqual([own.length, own.every((r) => r.employeeId === a.id && r.cost === 0)], [2, true]);
+  const { migrateAccounting } = await import('./accounting.js');
+  migrateAccounting(db);
+  const debs = handle(db, 'GET', '/api/contacts', {});
+  assert.equal(debs.length, 1, 'gleicher Auftraggeber nur einmal');
+  assert.equal(handle(db, 'GET', `/api/projects/${p.id}`, {}).debitorId, debs[0].id);
+});

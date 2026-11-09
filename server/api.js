@@ -8,6 +8,7 @@ import { ApiError, ANONYMOUS_ADMIN } from './errors.js';
 import { handleAbsences, handleInvoices, maskAbsences } from './billing.js';
 import { abacusExport, assertMonthOpen, handleRoles, handleWorktimeMonths, handleWorktimes } from './worktime.js';
 import { handleAssets, handleOffers, handleWorkPackages } from './offers.js';
+import { accountingExport, handleContacts, handleMessages, importPayments, messagesFor, reportHours } from './accounting.js';
 import { ALL_PERMISSIONS, permissionsFor } from '../shared/permissions.js';
 
 /** Rechte des Benutzers (aus seiner Rolle, ohne Anmeldung: alle). */
@@ -195,6 +196,8 @@ export function handle(db, method, pathname, query = {}, body, user = ANONYMOUS_
     for (const t of BOOTSTRAP_TABLES) out[t] = list(db, t);
     out.invoices = can('invoices.view') ? list(db, 'invoices') : [];
     out.offers = can('offers.view') ? list(db, 'offers') : [];
+    out.contacts = handleContacts(db, 'GET', null, null, validate, can);
+    out.messages = messagesFor(db, user);
     out.absences = maskAbsences(out.absences, user, can('absences.details'));
     out.roles = list(db, 'roles').sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
     out.worktimeMonths = handleWorktimeMonths(db, 'GET', null, {}, null, user, can);
@@ -210,6 +213,11 @@ export function handle(db, method, pathname, query = {}, body, user = ANONYMOUS_
   }
 
   if (resource === 'invoices') return handleInvoices(db, method, idOrAction ? Number(idOrAction) : null, body, user, validate, can);
+  if (resource === 'contacts') return handleContacts(db, method, idOrAction ? Number(idOrAction) : null, body, validate, can);
+  if (resource === 'messages') return handleMessages(db, method, idOrAction, query, body, user);
+  if (resource === 'accounting' && method === 'POST' && idOrAction === 'export') return accountingExport(db, body, user, can);
+  if (resource === 'accounting' && method === 'POST' && idOrAction === 'payments') return importPayments(db, body, can);
+  if (resource === 'reports' && method === 'GET' && idOrAction === 'hours') return reportHours(db, query, user, can);
   if (resource === 'offers') return handleOffers(db, method, idOrAction, body, user, validate, can);
   if (resource === 'workPackages') return handleWorkPackages(db, method, idOrAction ? Number(idOrAction) : null, query, body, validate, can);
   if (resource === 'assets') return handleAssets(db, method, idOrAction, body, can);
@@ -219,7 +227,7 @@ export function handle(db, method, pathname, query = {}, body, user = ANONYMOUS_
   if (resource === 'roles') return handleRoles(db, method, idOrAction ? Number(idOrAction) : null, body, user, can);
   if (resource === 'abacus' && idOrAction === 'export' && method === 'POST') return abacusExport(db, body, user, can);
   if (resource === 'abacusExports' && method === 'GET') {
-    need('abacus.export', 'Keine Berechtigung für den Abacus-Export.');
+    if (!can('abacus.export') && !can('accounting.export')) deny('Keine Berechtigung für das Exportprotokoll.');
     return list(db, 'abacusExports').sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
   if (resource === 'abacusExports') throw new ApiError(405, 'Methode nicht erlaubt');

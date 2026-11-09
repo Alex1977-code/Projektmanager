@@ -5,7 +5,7 @@ import { insert, list, transaction, setSettings } from './core.js';
 import { seedProtocols } from './seedProtocols.js';
 import { availability, buildAbsences, seedInvoices, seedWorktimes } from './seedExtra.js';
 import { migrateData } from './offers.js';
-import { seedOffers } from './seedOffers.js';
+import { seedAccounting, seedOffers } from './seedOffers.js';
 import { DEFAULT_ROLES } from '../shared/permissions.js';
 
 // ---------------------------------------------------------------- Hilfsfunktionen
@@ -370,6 +370,7 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
     seedWorktimes(db, { emps, today: todayIso, rand: mulberry32(2024) });
     seedInvoices(db, { projects: invoiceProjects, today: todayIso, rand: mulberry32(815), authorOf: (pr) => pr.leadId });
     seedOffers(db, { today: todayIso, rand: mulberry32(4711) });
+    seedAccounting(db, { today: todayIso });
 
     // Ressourcenplanung: Kapazität jedes Mitarbeiters je Woche auf seine Projekte verteilen
     const empWeeks = new Map();
@@ -406,7 +407,7 @@ export function seedIfEmpty(db) {
 export function ensureDefaults(db) {
   if (list(db, 'roles').length === 0) {
     DEFAULT_ROLES.forEach((r, i) => insert(db, 'roles', { ...r, sort: i }));
-    db.settingSet('dataLevel', 1);
+    migrateData(db); // Debitoren aus den Auftraggebern
     return true;
   }
   return migrateData(db);

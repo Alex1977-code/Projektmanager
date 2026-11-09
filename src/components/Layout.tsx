@@ -3,9 +3,10 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, CalendarRange, ChevronDown, Clock, CornerDownLeft, FolderKanban, LayoutDashboard,
   ListChecks, LogOut, Menu, ShieldCheck, Timer, NotebookPen, Palmtree, Plus, Receipt, Search, Settings, Users, Gauge, X,
-  Eye, FileSignature,
+  Eye, FileSignature, ChartPie, Landmark, Mail,
 } from 'lucide-react';
 import { useStore } from '../store';
+import { useMyMessages } from '../pages/Messages';
 import { Avatar } from './ui';
 import { ROLE_LABEL } from '../types';
 import { lazy, Suspense } from 'react';
@@ -27,7 +28,9 @@ const NAV = [
   { to: '/arbeitszeit', label: 'Arbeitszeit', icon: Timer },
   { to: '/angebote', label: 'Angebote', icon: FileSignature, perm: 'offers.view' },
   { to: '/controlling', label: 'Kosten & Controlling', icon: BarChart3, perm: 'costs.view' },
+  { to: '/auswertungen', label: 'Auswertungen', icon: ChartPie },
   { to: '/rechnungen', label: 'Rechnungen', icon: Receipt, perm: 'invoices.view' },
+  { to: '/buchhaltung', label: 'Debitoren & Kreditoren', icon: Landmark, perm: 'invoices.view' },
   { to: '/abwesenheiten', label: 'Abwesenheiten', icon: Palmtree },
   { to: '/team', label: 'Team', icon: Users },
 ];
@@ -56,6 +59,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const myOpen = me ? data.tasks.filter((t) => t.assigneeId === me.id && t.status !== 'erledigt') : [];
   const myOverdue = myOpen.filter((t) => t.dueDate && t.dueDate < today).length;
   const pendingAbs = data.absences.filter((a) => a.status === 'beantragt').length;
+  const { unread } = useMyMessages();
 
   return (
     <div className={classNames('app', navOpen && 'nav-open')}>
@@ -109,6 +113,7 @@ export function Layout({ children }: { children: ReactNode }) {
               {can('tasks.edit') && <button className="btn btn-primary btn-sm" onClick={() => setQuick('task')}><Plus size={16} /> Aufgabe</button>}
               {can('projects.edit') && <button className="btn btn-sm" onClick={() => setQuick('project')}><Plus size={16} /> Projekt</button>}
             </div>
+            {me && <NavLink to="/nachrichten" className="icon-btn mail-btn" aria-label={unread ? `Nachrichten, ${unread} ungelesen` : 'Nachrichten'} title="Nachrichten"><Mail size={19} />{unread > 0 && <span className="mail-badge">{unread > 9 ? '9+' : unread}</span>}</NavLink>}
             <UserMenu />
           </div>
         </header>

@@ -23,6 +23,9 @@ import { Invoices } from './pages/Invoices';
 import { InvoiceEditor } from './pages/InvoiceEditor';
 import { Worktime } from './pages/Worktime';
 import { Offers } from './pages/Offers';
+import { Reports } from './pages/Reports';
+import { Messages } from './pages/Messages';
+import { Accounting } from './pages/Accounting';
 import { OfferEditor } from './pages/OfferEditor';
 import { Roles } from './pages/Roles';
 
@@ -59,6 +62,9 @@ export function App() {
                 <Route path="/abwesenheiten" element={<Absences />} />
                 <Route path="/rechnungen" element={<Invoices />} />
                 <Route path="/rechnungen/:id" element={<InvoiceEditor />} />
+                <Route path="/auswertungen" element={<Reports />} />
+                <Route path="/nachrichten" element={<Messages />} />
+                <Route path="/buchhaltung" element={<Accounting />} />
                 <Route path="/angebote" element={<Offers />} />
                 <Route path="/angebote/:id" element={<OfferEditor />} />
                 <Route path="/arbeitszeit" element={<Worktime />} />

@@ -96,6 +96,7 @@ export interface Project {
   description: string | null;
   color: string | null;
   extNo: string | null;
+  debitorId?: ID | null;
 }
 
 export interface Phase {
@@ -176,6 +177,12 @@ export interface CostItem {
   description: string | null;
   amount: number;
   status: 'geplant' | 'angefallen';
+  kreditorId?: ID | null;
+  docNo?: string | null;
+  vatPct?: number | null;
+  dueDate?: string | null;
+  paidDate?: string | null;
+  exportedAt?: string | null;
 }
 
 export const PROTOCOL_TYPES = ['Planungsbesprechung', 'Baubesprechung', 'Jour fixe', 'Werksabnahme / FAT', 'Abnahme', 'Ortstermin', 'Interne Besprechung', 'Telefonnotiz'] as const;
@@ -303,6 +310,7 @@ export interface Settings {
   offerValidDays: number;
   offerRates: { label: string; rate: number }[];
   docFrame: DocFrame;
+  accounting: AccountingConfig;
 }
 
 /** Standardrahmen für Angebote und Rechnungen (Maße in mm) */
@@ -315,6 +323,22 @@ export interface DocFrame {
   left: number;
   right: number;
   foldMarks: boolean;
+}
+
+export interface AccountingConfig {
+  revenueAccount: string; debitorAccount: string; kreditorAccount: string; vatCode: string; inputVatCode: string;
+  defaultExpenseAccount: string; expenseAccounts: Record<string, string>; debitorStart: number; kreditorStart: number;
+}
+
+/** Geschäftspartner: Debitor (Auftraggeber) oder Kreditor (Lieferant, Nachunternehmer) */
+export interface Contact {
+  id: ID; kind: 'debitor' | 'kreditor'; number: string; name: string; addition: string | null; street: string | null; zip: string | null; city: string | null;
+  country: string | null; vatId: string | null; email: string | null; phone: string | null; iban?: string | null; paymentDays: number | null; note?: string | null; active: boolean;
+}
+
+export interface Message {
+  id: ID; fromId: ID; toIds: ID[]; subject: string; body: string; link: string | null; linkLabel: string | null;
+  threadId: ID | null; createdAt: string; readBy: ID[]; hiddenBy: ID[];
 }
 
 export interface Asset { id: ID; key: 'frameFirst' | 'frameNext' | 'logo'; name: string; mime: string; data: string; updatedAt: string }
@@ -426,11 +450,13 @@ export interface Data {
   offers: Offer[];
   workPackages: WorkPackage[];
   assets: Asset[];
+  contacts: Contact[];
+  messages: Message[];
   roles: RoleDef[];
   worktimeMonths: WorktimeMonth[];
   me: { employeeId: ID | null; role: string; permissions: string[] };
   summary: Summary;
 }
 
-export type Collection = 'employees' | 'projects' | 'phases' | 'milestones' | 'tasks' | 'allocations' | 'costs' | 'protocols' | 'absences' | 'invoices' | 'roles' | 'worktimeMonths' | 'offers' | 'workPackages';
+export type Collection = 'employees' | 'projects' | 'phases' | 'milestones' | 'tasks' | 'allocations' | 'costs' | 'protocols' | 'absences' | 'invoices' | 'roles' | 'worktimeMonths' | 'offers' | 'workPackages' | 'contacts';
 export type EntityOf<C extends Collection> = Data[C][number];

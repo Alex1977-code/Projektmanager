@@ -68,6 +68,7 @@ export function ProjectForm({ project, onClose, onSaved }: { project?: Project; 
     endDate: project?.endDate ?? addMonths(today, 12),
     budget: str(project?.budget),
     extNo: project?.extNo ?? '',
+    debitorId: str(project?.debitorId),
     description: project?.description ?? '',
   });
   const [lph, setLph] = useState<number[]>([1, 2, 3, 4]);
@@ -80,7 +81,7 @@ export function ProjectForm({ project, onClose, onSaved }: { project?: Project; 
     setSaving(true);
     const payload: Partial<Project> = {
       ...v, status: v.status as Project['status'], priority: v.priority as Project['priority'],
-      leadId: v.leadId ? Number(v.leadId) : null, budget: num(v.budget),
+      leadId: v.leadId ? Number(v.leadId) : null, budget: num(v.budget), debitorId: v.debitorId ? Number(v.debitorId) : null,
     };
     try {
       if (isNew) {
@@ -159,6 +160,12 @@ export function ProjectForm({ project, onClose, onSaved }: { project?: Project; 
         <Field label="Projektstart"><input type="date" value={v.startDate} onChange={(e) => set('startDate', e.target.value)} required /></Field>
         <Field label="Projektende"><input type="date" value={v.endDate} onChange={(e) => set('endDate', e.target.value)} required /></Field>
         <Field label="Honorar / Budget (netto, €)"><input inputMode="decimal" value={v.budget} onChange={(e) => set('budget', e.target.value)} placeholder="0" /></Field>
+        <Field label="Debitor (Buchhaltung)" hint="Für die Übergabe der Rechnungen an die Buchhaltung">
+          <select value={v.debitorId} onChange={(e) => { set('debitorId', e.target.value); const d = data.contacts.find((c) => String(c.id) === e.target.value); if (d && !v.client.trim()) set('client', d.name); }}>
+            <option value="">– nicht zugeordnet –</option>
+            {data.contacts.filter((c) => c.kind === 'debitor' && (c.active !== false || String(c.id) === v.debitorId)).map((c) => <option key={c.id} value={c.id}>{c.number} · {c.name}</option>)}
+          </select>
+        </Field>
         <Field label="Abacus-Projektnummer" hint="Für den Export der Projektzeiten; leer = Projektnummer"><input value={v.extNo} onChange={(e) => set('extNo', e.target.value)} placeholder={v.number} /></Field>
         <Field label="Priorität">
           <select value={v.priority} onChange={(e) => set('priority', e.target.value as Project['priority'] & string)}>
@@ -473,19 +480,20 @@ export function EmployeeForm({ employee, onClose }: { employee?: Employee; onClo
 
 // ===================================================================== Fremdkosten
 export function CostForm({ cost, projectId, onClose }: { cost?: CostItem; projectId: ID; onClose: () => void }) {
-  const { idx, create, update, remove } = useStore();
+  const { data, idx, create, update, remove } = useStore();
   const toast = useToast();
   const isNew = !cost;
   const phases = idx.phasesByProject.get(projectId) || [];
   const { values: v, set } = useForm({
     date: cost?.date ?? todayISO(), category: cost?.category ?? COST_CATEGORIES[0], description: cost?.description ?? '',
     amount: str(cost?.amount), status: cost?.status ?? 'angefallen', phaseId: str(cost?.phaseId),
+    kreditorId: str(cost?.kreditorId), docNo: cost?.docNo ?? '', vatPct: str(cost?.vatPct ?? data.settings.vatPct),
   });
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const amount = num(v.amount);
     if (!amount) return toast.error('Bitte einen Betrag angeben');
-    const payload: Partial<CostItem> = { ...v, amount, phaseId: v.phaseId ? Number(v.phaseId) : null, status: v.status as CostItem['status'] };
+    const payload: Partial<CostItem> = { ...v, amount, phaseId: v.phaseId ? Number(v.phaseId) : null, status: v.status as CostItem['status'], kreditorId: v.kreditorId ? Number(v.kreditorId) : null, docNo: v.docNo.trim() || null, vatPct: num(v.vatPct) ?? 0 };
     try {
       if (isNew) await create('costs', { ...payload, projectId });
       else await update('costs', cost.id, payload);
@@ -513,6 +521,15 @@ export function CostForm({ cost, projectId, onClose }: { cost?: CostItem; projec
         </Field>
         <Field label="Betrag netto (€) *"><input inputMode="decimal" value={v.amount} onChange={(e) => set('amount', e.target.value)} required /></Field>
         <Field label="Datum"><input type="date" value={v.date} onChange={(e) => set('date', e.target.value)} /></Field>
+        <div className="field-span2 form-section">Eingangsrechnung (für die Übergabe an die Buchhaltung)</div>
+        <Field label="Kreditor">
+          <select value={v.kreditorId} onChange={(e) => set('kreditorId', e.target.value)}>
+            <option value="">– nicht zugeordnet –</option>
+            {data.contacts.filter((c) => c.kind === 'kreditor' && (c.active !== false || String(c.id) === v.kreditorId)).map((c) => <option key={c.id} value={c.id}>{c.number} · {c.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Belegnummer"><input value={v.docNo} onChange={(e) => set('docNo', e.target.value)} placeholder="Rechnungsnummer des Lieferanten" /></Field>
+        <Field label="Umsatzsteuer (%)"><input inputMode="decimal" value={v.vatPct} onChange={(e) => set('vatPct', e.target.value)} /></Field>
         <Field label="Status">
           <select value={v.status} onChange={(e) => set('status', e.target.value as CostItem['status'])}>
             <option value="angefallen">angefallen (Ist)</option>

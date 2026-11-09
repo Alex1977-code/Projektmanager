@@ -39,7 +39,7 @@ export function AbacusPanel({ month, setMonth }: { month: string; setMonth: (m: 
 
   const loadLog = useCallback(async () => {
     if (!can('abacus.export')) return;
-    try { setLog(await api.get<LogRow[]>('/api/abacusExports')); } catch { /* ohne Protokoll */ }
+    try { setLog((await api.get<LogRow[]>('/api/abacusExports')).filter((l) => l.type === 'leistungen' || l.type === 'arbeitszeit')); } catch { /* ohne Protokoll */ }
   }, [can]);
   useEffect(() => { loadLog(); }, [loadLog]);
   useEffect(() => setPreview(null), [type, month, onlyApproved]);
