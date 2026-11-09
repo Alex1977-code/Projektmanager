@@ -18,6 +18,8 @@ export const config = () => ({
   ldapBindPassword: process.env.LDAP_BIND_PASSWORD || '',
   ldapGroupAdmin: process.env.LDAP_GROUP_ADMIN || '',
   ldapGroupLeitung: process.env.LDAP_GROUP_LEITUNG || '',
+  // beliebige Rollen: "controlling=PM-Controlling;extern=PM-Extern" (Rollenschlüssel=AD-Gruppe)
+  ldapRoleGroups: process.env.LDAP_ROLE_GROUPS || '',
   ldapCaFile: process.env.LDAP_CA_FILE || '',
   ldapInsecure: process.env.LDAP_TLS_INSECURE === '1',
   header: (process.env.AUTH_HEADER || 'x-remote-user').toLowerCase(),
@@ -119,9 +121,15 @@ export function mapUser(db, { username, email, name, groups = [] }, cfg = config
   const emp = all.find((e) => (e.login || '').toLowerCase() === login) || (mail ? all.find((e) => (e.email || '').toLowerCase() === mail) : undefined);
   if (!emp) throw new AuthError(403, `Für „${login}“ ist kein Mitarbeiterprofil hinterlegt. Bitte wenden Sie sich an die Administration.`);
   if (!emp.active) throw new AuthError(403, 'Dieses Mitarbeiterprofil ist deaktiviert.');
-  let role = ROLES.includes(emp.appRole) ? emp.appRole : 'mitarbeiter';
-  if (cfg.ldapGroupAdmin || cfg.ldapGroupLeitung) {
-    role = groupMatches(groups, cfg.ldapGroupAdmin) ? 'admin' : groupMatches(groups, cfg.ldapGroupLeitung) ? 'leitung' : role === 'admin' ? 'mitarbeiter' : role;
+  const known = new Set(db.list('roles').map((r) => r.key).concat(ROLES));
+  let role = known.has(emp.appRole) ? emp.appRole : 'mitarbeiter';
+  // Rollen aus AD-Gruppen (spezifische Zuordnungen zuerst, dann Administration/Projektleitung)
+  const mapping = String(cfg.ldapRoleGroups || '').split(';').map((x) => x.split('=').map((y) => y.trim())).filter((x) => x[0] && x[1]);
+  if (cfg.ldapGroupLeitung) mapping.unshift(['leitung', cfg.ldapGroupLeitung]);
+  if (cfg.ldapGroupAdmin) mapping.unshift(['admin', cfg.ldapGroupAdmin]);
+  if (mapping.length) {
+    const hit = mapping.find(([, g]) => groupMatches(groups, g));
+    role = hit ? hit[0] : role === 'admin' ? 'mitarbeiter' : role;
   }
   return { employeeId: emp.id, role, username: login, name: emp.name || name || login };
 }

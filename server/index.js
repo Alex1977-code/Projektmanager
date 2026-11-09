@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDb, DB_FILE } from './db.js';
 import { handle, ApiError } from './api.js';
-import { seedIfEmpty } from './seed.js';
+import { seedIfEmpty, ensureDefaults } from './seed.js';
 import * as auth from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -16,6 +16,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 const db = openDb();
 if (process.env.NO_SEED !== '1') seedIfEmpty(db);
+ensureDefaults(db);
 const authCfg = auth.config();
 if (!['none', 'ldap', 'header'].includes(authCfg.mode)) throw new Error(`Unbekannter AUTH_MODE: ${authCfg.mode}`);
 if (authCfg.mode === 'ldap' && (!authCfg.ldapUrl || !authCfg.ldapBaseDn)) throw new Error('AUTH_MODE=ldap erfordert LDAP_URL und LDAP_BASE_DN');

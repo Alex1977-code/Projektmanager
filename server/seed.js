@@ -3,7 +3,8 @@
 // Alle Namen von Personen, Auftraggebern und Bauwerken sind frei erfunden.
 import { insert, list, transaction, setSettings } from './core.js';
 import { seedProtocols } from './seedProtocols.js';
-import { availability, buildAbsences, seedInvoices } from './seedExtra.js';
+import { availability, buildAbsences, seedInvoices, seedWorktimes } from './seedExtra.js';
+import { DEFAULT_ROLES } from '../shared/permissions.js';
 
 // ---------------------------------------------------------------- Hilfsfunktionen
 function mulberry32(seed) {
@@ -184,6 +185,7 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
 
   transaction(db, () => {
     setSettings(db, { companyName: 'Ingenieurbüro Stahlwasserbau & Bewegliche Brücken' });
+    DEFAULT_ROLES.forEach((r, i) => insert(db, 'roles', { ...r, sort: i }));
 
     const emps = EMPLOYEES.map((e, i) => {
       const [name, short, title, role, department, hourlyRate, weeklyHours, keys, skills] = e;
@@ -192,8 +194,9 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
         name, short, title, role, department, hourlyRate, weeklyHours, skills, email,
         phone: `+49 421 55 60-${String(100 + i * 3)}`, color: COLORS[i % COLORS.length], active: true,
         login: email.split('@')[0].replace(/^(\w)\w*\./, '$1.'),
-        appRole: i === 0 ? 'admin' : keys.includes('pl') || keys.includes('office') ? 'leitung' : 'mitarbeiter',
+        appRole: i === 0 ? 'admin' : keys.includes('pl') ? 'leitung' : keys.includes('office') ? 'controlling' : name === 'Laura Schäfer' ? 'extern' : 'mitarbeiter',
         vacationDays: weeklyHours >= 30 ? 30 : 15,
+        personnelNo: String(1001 + i),
       });
       return { ...row, keys };
     });
@@ -225,6 +228,7 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
         number: p.number, name: p.name, client: p.client, type: p.type, location: p.location,
         leadId: emps[p.lead].id, status: p.status, priority: p.priority, startDate, endDate,
         budget: p.budget, description: p.description, color: PROJECT_COLORS[pIdx % PROJECT_COLORS.length],
+        extNo: p.number.replace('P-', '').replace('-', ''),
       });
       byNumber.set(p.number, { project, team: p.team });
 
@@ -361,6 +365,7 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
     });
 
     seedProtocols(db, { byNumber, emp: (i) => emps[i].id, today: todayIso });
+    seedWorktimes(db, { emps, today: todayIso, rand: mulberry32(2024) });
     seedInvoices(db, { projects: invoiceProjects, today: todayIso, rand: mulberry32(815), authorOf: (pr) => pr.leadId });
 
     // Ressourcenplanung: Kapazität jedes Mitarbeiters je Woche auf seine Projekte verteilen
@@ -392,4 +397,13 @@ export function seedIfEmpty(db) {
     seed(db);
     console.log('Demodaten wurden angelegt.');
   }
+}
+
+/** Standardrollen nachrüsten (bestehende Datenbanken aus älteren Versionen). */
+export function ensureDefaults(db) {
+  if (list(db, 'roles').length === 0) {
+    DEFAULT_ROLES.forEach((r, i) => insert(db, 'roles', { ...r, sort: i }));
+    return true;
+  }
+  return false;
 }

@@ -34,7 +34,8 @@ function DayInput({ value, onCommit, label, weekend }: { value: number; onCommit
 }
 
 export function Timesheet() {
-  const { data, idx, me, refreshSummary, isLead } = useStore();
+  const { data, idx, me, refreshSummary, can } = useStore();
+  const isLead = can('time.all');
   const toast = useToast();
   const today = todayISO();
   const [week, setWeek] = useState(startOfWeek(today));

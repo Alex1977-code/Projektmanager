@@ -93,7 +93,8 @@ function useAllocIndex(weeks: string[]) {
 
 // ============================================================ Teamansicht (alle Mitarbeiter)
 export function ResourceGrid({ weeks, employees, showAbsolute }: { weeks: string[]; employees: Employee[]; showAbsolute: boolean }) {
-  const { data, idx, setAllocation, isLead } = useStore();
+  const { data, idx, setAllocation, can } = useStore();
+  const canPlan = can('resources.edit');
   const ai = useAllocIndex(weeks);
   const [open, setOpen] = useState<Set<ID>>(new Set());
   const [extra, setExtra] = useState<Record<ID, ID[]>>({});
@@ -171,14 +172,14 @@ export function ResourceGrid({ weeks, employees, showAbsolute }: { weeks: string
                       <td className="rg-cap" />
                       {weeks.map((w) => (
                         <td key={w} className="rg-input-cell">
-                          <HoursInput value={ai.byEmpProjWeek.get(`${e.id}|${pid}|${w}`) || 0} title={`${p.number} · KW ${isoWeek(w)}`} disabled={!isLead}
+                          <HoursInput value={ai.byEmpProjWeek.get(`${e.id}|${pid}|${w}`) || 0} title={`${p.number} · KW ${isoWeek(w)}`} disabled={!canPlan}
                             onCommit={(v) => setAllocation(e.id, pid, w, v)} />
                         </td>
                       ))}
                     </tr>
                   );
                 })}
-                {isOpen && isLead && (
+                {isOpen && canPlan && (
                   <tr className="rg-proj rg-add">
                     <td className="rg-name" colSpan={2}>
                       <label className="rg-add-select">
@@ -218,7 +219,8 @@ export function ResourceGrid({ weeks, employees, showAbsolute }: { weeks: string
 
 // ============================================================ Projektansicht
 export function ProjectResourceGrid({ projectId, weeks }: { projectId: ID; weeks: string[] }) {
-  const { data, idx, setAllocation, isLead } = useStore();
+  const { data, idx, setAllocation, can } = useStore();
+  const canPlan = can('resources.edit');
   const ai = useAllocIndex(weeks);
   const [extra, setExtra] = useState<ID[]>([]);
   const project = idx.projectById.get(projectId);
@@ -259,7 +261,7 @@ export function ProjectResourceGrid({ projectId, weeks }: { projectId: ID; weeks
                   const u = wc.hours ? total / wc.hours : total ? 9.99 : 0;
                   return (
                     <td key={w} className={classNames('rg-input-cell rg-with-load', wc.hours === 0 && 'rg-absent-cell')}>
-                      <HoursInput value={ai.byEmpProjWeek.get(`${e.id}|${projectId}|${w}`) || 0} title={`${e.name} · KW ${isoWeek(w)}`} disabled={!isLead}
+                      <HoursInput value={ai.byEmpProjWeek.get(`${e.id}|${projectId}|${w}`) || 0} title={`${e.name} · KW ${isoWeek(w)}`} disabled={!canPlan}
                         onCommit={(v) => setAllocation(e.id, projectId, w, v)} />
                       <span className={classNames('rg-load', wc.hours === 0 ? 'rg-absent' : utilClass(total, wc.hours))} title={`Gesamtauslastung über alle Projekte\n${capTitle(e.name, w, total, wc)}`}>
                         {wc.hours === 0 ? 'abwesend' : total > 0 ? `${Math.round(u * 100)}%` : '–'}{wc.offDays > 0 && wc.hours > 0 ? ` · −${String(wc.offDays).replace('.', ',')} T` : ''}
@@ -273,7 +275,7 @@ export function ProjectResourceGrid({ projectId, weeks }: { projectId: ID; weeks
           {emps.length === 0 && (
             <tr><td colSpan={weeks.length + 2} className="rg-empty">Noch niemand eingeplant. Fügen Sie unten Teammitglieder hinzu.</td></tr>
           )}
-          {isLead && <tr className="rg-proj rg-add">
+          {canPlan && <tr className="rg-proj rg-add">
             <td className="rg-name" colSpan={2}>
               <label className="rg-add-select">
                 <Plus size={14} />

@@ -261,3 +261,123 @@ test('Datenschutz: Krankheit anderer Personen wird für Mitarbeiter verborgen', 
   assert.deepEqual(seen.map((x) => [x.employeeId, x.type, x.note]), [[b.id, 'Sonstiges', ''], [a.id, 'Krankheit', 'Arzt']]);
   assert.equal(handle(db, 'GET', '/api/absences', {}).filter((x) => x.type === 'Krankheit').length, 2, 'Leitung sieht alles');
 });
+
+// ---------------------------------------------------------------- Rollen & Rechte
+test('Rollen: eigene Rolle mit Rechten, Schutz der Standardrollen', () => {
+  const db = fresh();
+  seedRoles(db);
+  const p = handle(db, 'POST', '/api/projects', {}, { name: 'P', budget: 1000 });
+  const e = handle(db, 'POST', '/api/employees', {}, { name: 'C', appRole: 'buero' });
+  const custom = handle(db, 'POST', '/api/roles', {}, { name: 'Büro', permissions: ['invoices.view', 'unbekannt'] });
+  assert.equal(custom.key, 'buero');
+  assert.deepEqual(custom.permissions, ['invoices.view'], 'unbekannte Rechte werden verworfen');
+  const u = { employeeId: e.id, role: 'buero', name: 'C', username: 'c' };
+  assert.equal(handle(db, 'GET', '/api/invoices', {}, undefined, u).length, 0, 'darf Rechnungen sehen');
+  assert.throws(() => handle(db, 'POST', '/api/invoices', {}, { projectId: p.id, date: '2026-11-09' }, u), (x) => x.status === 403, 'aber nicht erstellen');
+  assert.throws(() => handle(db, 'PUT', `/api/projects/${p.id}`, {}, { budget: 2 }, u), (x) => x.status === 403);
+  assert.throws(() => handle(db, 'POST', '/api/roles', {}, { name: 'X' }, u), (x) => x.status === 403, 'Rollenverwaltung nur mit roles.edit');
+  handle(db, 'PUT', `/api/roles/${custom.id}`, {}, { permissions: ['invoices.view', 'invoices.edit'] });
+  assert.ok(handle(db, 'POST', '/api/invoices', {}, { projectId: p.id, date: '2026-11-09' }, u).id, 'Rechteänderung wirkt sofort');
+  const admin = handle(db, 'GET', '/api/roles', {}).find((r) => r.key === 'admin');
+  assert.throws(() => handle(db, 'PUT', `/api/roles/${admin.id}`, {}, { permissions: [] }), /alle Rechte/);
+  const ma = handle(db, 'GET', '/api/roles', {}).find((r) => r.key === 'mitarbeiter');
+  assert.throws(() => handle(db, 'DELETE', `/api/roles/${ma.id}`, {}), (x) => x.status === 409);
+  assert.throws(() => handle(db, 'DELETE', `/api/roles/${custom.id}`, {}), /zugewiesen/);
+  const boot = handle(db, 'GET', '/api/bootstrap', {}, undefined, u);
+  assert.deepEqual(boot.me.permissions.sort(), ['invoices.edit', 'invoices.view']);
+  assert.equal(boot.employees[0].hourlyRate, null, 'Stundensätze nur mit costs.view');
+});
+
+test('AD-Gruppen: beliebige Rollen über LDAP_ROLE_GROUPS', () => {
+  const db = fresh();
+  seedRoles(db);
+  handle(db, 'POST', '/api/employees', {}, { name: 'P', login: 'p.jung', appRole: 'mitarbeiter' });
+  const cfg = { ...auth.config(), ldapGroupAdmin: 'PM-Admins', ldapGroupLeitung: '', ldapRoleGroups: 'controlling=PM-Controlling;extern=PM-Extern' };
+  assert.equal(auth.mapUser(db, { username: 'p.jung', groups: ['CN=PM-Controlling,OU=G,DC=f,DC=l'] }, cfg).role, 'controlling');
+  assert.equal(auth.mapUser(db, { username: 'p.jung', groups: ['CN=Andere,OU=G,DC=f,DC=l'] }, cfg).role, 'mitarbeiter');
+});
+
+// ---------------------------------------------------------------- Arbeitszeit
+import { checkDay, netMinutes } from '../shared/worktime.js';
+import { DEFAULT_ROLES } from '../shared/permissions.js';
+function seedRoles(db) { DEFAULT_ROLES.forEach((r, i) => db.insert('roles', { ...r, sort: i })); }
+
+test('ArbZG-Prüfungen', () => {
+  assert.equal(netMinutes({ start: '07:30', end: '16:30', breakMin: 30 }), 510);
+  assert.equal(netMinutes({ start: '22:00', end: '06:00', breakMin: 30 }), 450, 'über Mitternacht');
+  const txt = (w, prev) => checkDay({ date: '2026-11-10', ...w }, prev).map((x) => x.text).join(' | ');
+  assert.match(txt({ start: '06:00', end: '17:00', breakMin: 30 }), /10 Stunden/);
+  assert.match(txt({ start: '08:00', end: '15:00', breakMin: 15 }), /mindestens 30 min/);
+  assert.match(txt({ start: '07:00', end: '17:00', breakMin: 30 }), /mindestens 45 min/);
+  assert.match(txt({ start: '06:00', end: '14:00', breakMin: 30 }, { date: '2026-11-09', start: '12:00', end: '22:00' }), /Ruhezeit nur 8 h/);
+  assert.match(checkDay({ date: '2026-11-08', start: '09:00', end: '12:00', breakMin: 0 }, null).map((x) => x.text).join(), /Sonntag/);
+  assert.equal(txt({ start: '08:00', end: '16:30', breakMin: 30 }), '');
+});
+
+test('Arbeitszeit: Stempeluhr, Mindestpause, Monatsabschluss sperrt Änderungen', () => {
+  const db = fresh();
+  seedRoles(db);
+  const a = handle(db, 'POST', '/api/employees', {}, { name: 'A', appRole: 'mitarbeiter', weeklyHours: 40 });
+  const b = handle(db, 'POST', '/api/employees', {}, { name: 'B', appRole: 'leitung' });
+  const p = handle(db, 'POST', '/api/projects', {}, { name: 'P' });
+  const ua = { employeeId: a.id, role: 'mitarbeiter', name: 'A', username: 'a' };
+  const ub = { employeeId: b.id, role: 'leitung', name: 'B', username: 'b' };
+  handle(db, 'POST', '/api/worktimes/stamp', {}, { action: 'kommen', date: '2026-11-10', time: '07:30' }, ua);
+  assert.throws(() => handle(db, 'POST', '/api/worktimes/stamp', {}, { action: 'kommen', date: '2026-11-10', time: '07:31' }, ua), /eingestempelt/);
+  const w = handle(db, 'POST', '/api/worktimes/stamp', {}, { action: 'gehen', date: '2026-11-10', time: '17:00' }, ua);
+  assert.equal(w.breakMin, 45, 'gesetzliche Mindestpause ergänzt');
+  assert.match(w.note, /§ 4 ArbZG/);
+  assert.throws(() => handle(db, 'GET', '/api/worktimes', { employeeId: String(b.id) }, undefined, ua), (x) => x.status === 403, 'fremde Arbeitszeiten');
+  assert.equal(handle(db, 'GET', '/api/worktimes', { employeeId: String(a.id), month: '2026-11' }, undefined, ub).length, 1, 'Leitung sieht alle');
+  // Monat einreichen, freigeben → gesperrt
+  handle(db, 'POST', '/api/worktimeMonths/action', {}, { employeeId: a.id, month: '2026-11', action: 'submit' }, ua);
+  assert.throws(() => handle(db, 'POST', '/api/worktimes/set', {}, { employeeId: a.id, date: '2026-11-11', start: '08:00', end: '16:00' }, ua), /eingereicht/);
+  assert.throws(() => handle(db, 'POST', '/api/worktimeMonths/action', {}, { employeeId: a.id, month: '2026-11', action: 'approve' }, ua), (x) => x.status === 403);
+  const m = handle(db, 'POST', '/api/worktimeMonths/action', {}, { employeeId: a.id, month: '2026-11', action: 'approve' }, ub);
+  assert.equal(m.status, 'freigegeben');
+  assert.throws(() => handle(db, 'POST', '/api/timeEntries/set', {}, { employeeId: a.id, projectId: p.id, date: '2026-11-12', hours: 2 }, ua), /abgeschlossen/);
+  assert.throws(() => handle(db, 'POST', '/api/timeEntries/set', {}, { employeeId: a.id, projectId: p.id, date: '2026-11-12', hours: 2 }, ub), /wieder öffnen/);
+  handle(db, 'POST', '/api/worktimeMonths/action', {}, { employeeId: a.id, month: '2026-11', action: 'reopen' }, ub);
+  assert.ok(handle(db, 'POST', '/api/timeEntries/set', {}, { employeeId: a.id, projectId: p.id, date: '2026-12-01', hours: 2 }, ua).id);
+});
+
+test('Abacus-Export: CSV nach Vorlage, nur freigegebene Monate, Exportkennzeichen', () => {
+  const db = fresh();
+  seedRoles(db);
+  const a = handle(db, 'POST', '/api/employees', {}, { name: 'Anna', personnelNo: '4711', weeklyHours: 40 });
+  const c = handle(db, 'POST', '/api/employees', {}, { name: 'Carl', weeklyHours: 40 });
+  const p = handle(db, 'POST', '/api/projects', {}, { name: 'Schleuse', number: 'P-2026-001', extNo: '26001' });
+  const ph = handle(db, 'POST', '/api/phases', {}, { projectId: p.id, code: 'LPH 3', name: 'Entwurf', startDate: '2026-10-01', endDate: '2026-12-31' });
+  handle(db, 'POST', '/api/timeEntries/set', {}, { employeeId: a.id, projectId: p.id, phaseId: ph.id, date: '2026-10-05', hours: 7.5 });
+  handle(db, 'POST', '/api/timeEntries/set', {}, { employeeId: c.id, projectId: p.id, phaseId: ph.id, date: '2026-10-05', hours: 3 });
+  handle(db, 'POST', '/api/worktimes/set', {}, { employeeId: a.id, date: '2026-10-05', start: '07:30', end: '15:30', breakMin: 30 });
+  handle(db, 'POST', '/api/worktimeMonths/action', {}, { employeeId: a.id, month: '2026-10', action: 'approve' });
+  handle(db, 'PUT', '/api/settings', {}, { abacus: { ...handle(db, 'GET', '/api/settings', {}).abacus, mandant: '7777' } });
+  const ma = { employeeId: a.id, role: 'mitarbeiter', name: 'A', username: 'a' };
+  assert.throws(() => handle(db, 'POST', '/api/abacus/export', {}, { type: 'leistungen', month: '2026-10' }, ma), (x) => x.status === 403);
+  const pre = handle(db, 'POST', '/api/abacus/export', {}, { type: 'leistungen', month: '2026-10', preview: true });
+  assert.equal(pre.count, 1, 'Carl ohne freigegebenen Monat nicht dabei');
+  assert.match(pre.warnings.join(), /Carl/);
+  assert.equal(pre.content, undefined, 'Vorschau ohne Datei');
+  const out = handle(db, 'POST', '/api/abacus/export', {}, { type: 'leistungen', month: '2026-10' });
+  const lines = out.content.replace('﻿', '').trim().split('\r\n');
+  assert.equal(lines[0], 'Mandant;Mitarbeiter;Datum;Projekt;Leistungsart;Menge;Text');
+  assert.equal(lines[1], '7777;4711;05.10.2026;26001;103;7,50;LPH 3 Entwurf');
+  assert.ok(handle(db, 'GET', '/api/timeEntries', { employeeId: String(a.id) })[0].exportedAt, 'als exportiert gekennzeichnet');
+  assert.equal(handle(db, 'GET', '/api/abacusExports', {}).length, 1);
+  const az = handle(db, 'POST', '/api/abacus/export', {}, { type: 'arbeitszeit', month: '2026-10' });
+  const azl = az.content.trim().split('\r\n');
+  assert.ok(azl.includes('4711;05.10.2026;07:30;15:30;30;7,50;'), azl.slice(0, 4).join(' / '));
+  assert.ok(azl.some((l) => l.startsWith('4711;03.10.2026') === false), 'Wochenende/Feiertag ohne Zeile');
+});
+
+test('Rechteausweitung: Mitarbeiterdaten-Recht erlaubt keine Rollenzuweisung', () => {
+  const db = fresh();
+  seedRoles(db);
+  db.insert('roles', { key: 'personal', name: 'Personal', permissions: ['employees.edit'], system: false, sort: 9 });
+  const e = handle(db, 'POST', '/api/employees', {}, { name: 'HR', appRole: 'personal' });
+  const u = { employeeId: e.id, role: 'personal', name: 'HR', username: 'hr' };
+  assert.equal(handle(db, 'PUT', `/api/employees/${e.id}`, {}, { phone: '123', appRole: 'personal' }, u).phone, '123', 'unveränderte Rolle ist erlaubt');
+  assert.throws(() => handle(db, 'PUT', `/api/employees/${e.id}`, {}, { appRole: 'admin' }, u), (x) => x.status === 403);
+  assert.throws(() => handle(db, 'POST', '/api/employees', {}, { name: 'X', appRole: 'admin' }, u), (x) => x.status === 403);
+});

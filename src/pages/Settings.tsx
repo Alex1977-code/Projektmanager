@@ -18,7 +18,8 @@ const MODE_TEXT: Record<string, string> = {
 };
 
 export function Settings() {
-  const { data, saveSettings, isAdmin, authMode, session } = useStore();
+  const { data, saveSettings, can, authMode, session } = useStore();
+  const isAdmin = can('settings.edit') || can('data.export');
   const toast = useToast();
   const [s, setS] = useState<SettingsT>({ ...data.settings });
   const set = <K extends keyof SettingsT>(k: K, v: SettingsT[K]) => setS((x) => ({ ...x, [k]: v }));
@@ -36,7 +37,7 @@ export function Settings() {
       toast.error((e as Error).message);
     }
   };
-  if (!isAdmin) return <div className="page"><EmptyState title="Kein Zugriff" text="Die Einstellungen sind der Administration vorbehalten." /></div>;
+  if (!isAdmin) return <div className="page"><EmptyState title="Kein Zugriff" text="Für die Einstellungen fehlt Ihnen die Berechtigung." /></div>;
 
   const counts: [string, number][] = [
     ['Projekte', data.projects.length], ['Leistungsphasen', data.phases.length], ['Aufgaben', data.tasks.length],

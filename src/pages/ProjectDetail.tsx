@@ -30,7 +30,8 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function ProjectDetail() {
   const { id } = useParams();
-  const { data, idx, isLead } = useStore();
+  const { data, idx, can } = useStore();
+  const isLead = can('projects.edit');
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
   const project = idx.projectById.get(Number(id));
@@ -67,7 +68,7 @@ export function ProjectDetail() {
         actions={isLead ? <button className="btn" onClick={() => setEditing(true)}><Pencil size={16} /> Bearbeiten</button> : undefined}
       >
         <nav className="tabs" role="tablist">
-          {TABS.filter((t) => t.id !== 'rechnungen' || isLead).map((t) => (
+          {TABS.filter((t) => (t.id !== 'rechnungen' || can('invoices.view')) && (t.id !== 'kosten' || can('costs.view'))).map((t) => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} className={classNames('tab', tab === t.id && 'active')}
               onClick={() => setParams(t.id === 'uebersicht' ? {} : { tab: t.id }, { replace: true })}>
               {t.label}
@@ -82,9 +83,9 @@ export function ProjectDetail() {
       {tab === 'termine' && <Schedule project={project} />}
       {tab === 'aufgaben' && <ProjectTasks project={project} tasks={tasks} />}
       {tab === 'ressourcen' && <ProjectResources project={project} />}
-      {tab === 'kosten' && <ProjectCosts project={project} m={m} />}
+      {tab === 'kosten' && can('costs.view') && <ProjectCosts project={project} m={m} />}
       {tab === 'protokolle' && <ProjectProtocols project={project} />}
-      {tab === 'rechnungen' && isLead && <ProjectInvoices project={project} />}
+      {tab === 'rechnungen' && can('invoices.view') && <ProjectInvoices project={project} />}
 
       {editing && <ProjectForm project={project} onClose={() => setEditing(false)} />}
     </div>
@@ -93,7 +94,8 @@ export function ProjectDetail() {
 
 // ======================================================================= Übersicht
 function Overview({ project, m, tasks }: { project: Project; m: ProjectMetrics; tasks: Task[] }) {
-  const { data, idx, update, isLead } = useStore();
+  const { data, idx, update, can } = useStore();
+  const isLead = can('schedule.edit');
   const [, setParams] = useSearchParams();
   const [editPhase, setEditPhase] = useState<Phase | null>(null);
   const [editMs, setEditMs] = useState<Milestone | 'new' | null>(null);
@@ -213,7 +215,8 @@ function Overview({ project, m, tasks }: { project: Project; m: ProjectMetrics; 
 const TASK_COLOR: Record<TaskStatus, string> = { offen: '#94a3b8', in_arbeit: '#2563eb', pruefung: '#d97706', erledigt: '#16a34a' };
 
 function Schedule({ project }: { project: Project }) {
-  const { idx, update, isLead } = useStore();
+  const { idx, update, can } = useStore();
+  const isLead = can('schedule.edit');
   const [scale, setScale] = useState<GanttScale>('month');
   const [open, setOpen] = useState<Set<number>>(new Set());
   const [editPhase, setEditPhase] = useState<Phase | 'new' | null>(null);
@@ -410,7 +413,8 @@ function ProjectResources({ project }: { project: Project }) {
 
 // ======================================================================= Kosten
 function ProjectCosts({ project, m }: { project: Project; m: ProjectMetrics }) {
-  const { data, idx, isLead } = useStore();
+  const { data, idx, can } = useStore();
+  const isLead = can('costs.edit');
   const [editCost, setEditCost] = useState<CostItem | 'new' | null>(null);
   const [editPhase, setEditPhase] = useState<Phase | null>(null);
   const phases = idx.phasesByProject.get(project.id) || [];

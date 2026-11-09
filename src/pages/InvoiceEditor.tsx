@@ -34,7 +34,9 @@ function NumInput({ value, onChange, disabled, suffix, width = 90, step }: { val
 
 export function InvoiceEditor() {
   const { id } = useParams();
-  const { data, idx, update, remove, isLead } = useStore();
+  const { data, idx, update, remove, can } = useStore();
+  const isLead = can('invoices.view');
+  const canEdit = can('invoices.edit');
   const toast = useToast();
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -61,11 +63,11 @@ export function InvoiceEditor() {
 
   const all = data.invoices;
   const prevList = useMemo(() => (draft ? previousInvoices(all, draft) : []), [all, draft]);
-  if (!isLead) return <div className="page"><EmptyState title="Kein Zugriff" text="Rechnungen sind der Projektleitung vorbehalten." /></div>;
+  if (!isLead) return <div className="page"><EmptyState title="Kein Zugriff" text="Für Rechnungen fehlt Ihnen die Berechtigung." /></div>;
   if (!draft) return <div className="page"><EmptyState title="Rechnung nicht gefunden" action={<Link className="btn" to="/rechnungen">Zur Übersicht</Link>} /></div>;
 
   const project = idx.projectById.get(draft.projectId);
-  const editable = draft.status === 'entwurf';
+  const editable = draft.status === 'entwurf' && canEdit;
   const previousNet = prevList.reduce((s, i) => s + i.net, 0);
   const calc = editable ? computeInvoice(draft, previousNet) : { ...draft, lines: draft.lines.map((l) => ({ ...l, amount: l.amount ?? (l.fee * l.percent) / 100 })) };
   const prev = prevList[prevList.length - 1];

@@ -21,6 +21,8 @@ import { ProtocolEditor } from './pages/ProtocolEditor';
 import { Absences } from './pages/Absences';
 import { Invoices } from './pages/Invoices';
 import { InvoiceEditor } from './pages/InvoiceEditor';
+import { Worktime } from './pages/Worktime';
+import { Roles } from './pages/Roles';
 
 // Veröffentlichte Version: Browser-Backend mit gemeinsamer Datenbank (nur dort geladen)
 const HostedGate = IS_HOSTED ? lazy(() => import('./local/HostedGate').then((m) => ({ default: m.HostedGate }))) : null;
@@ -55,6 +57,8 @@ export function App() {
                 <Route path="/abwesenheiten" element={<Absences />} />
                 <Route path="/rechnungen" element={<Invoices />} />
                 <Route path="/rechnungen/:id" element={<InvoiceEditor />} />
+                <Route path="/arbeitszeit" element={<Worktime />} />
+                <Route path="/rollen" element={<Roles />} />
                 <Route path="/team" element={<Team />} />
                 <Route path="/einstellungen" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

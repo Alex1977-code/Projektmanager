@@ -11,7 +11,9 @@ import { weekCapacity } from '../utils/capacity';
 import { addDays, fmtDateShort } from '../utils/date';
 
 export function Team() {
-  const { data, idx, isAdmin } = useStore();
+  const { data, idx, can } = useStore();
+  const isAdmin = can('employees.edit');
+  const seeRates = can('costs.view');
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState('');
   const [showInactive, setShowInactive] = useState(false);
@@ -98,7 +100,7 @@ export function Team() {
                     {e.email && <a href={`mailto:${e.email}`} onClick={(ev) => ev.stopPropagation()} title={e.email}><Mail size={14} /></a>}
                     {e.phone && <a href={`tel:${e.phone}`} onClick={(ev) => ev.stopPropagation()} title={e.phone}><Phone size={14} /></a>}
                     <span className="spacer" />
-                    {isAdmin && <span className="muted small">{fmtEur(e.hourlyRate)}/h</span>}
+                    {seeRates && <span className="muted small">{fmtEur(e.hourlyRate)}/h</span>}
                   </footer>
                 </article>
               );

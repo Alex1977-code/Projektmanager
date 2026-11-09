@@ -10,7 +10,9 @@ import { todayISO } from '../utils/date';
 import { fmtEur, fmtEurCompact, fmtPct, sum } from '../utils/format';
 
 export function Invoices() {
-  const { data, idx, isLead } = useStore();
+  const { data, idx, can } = useStore();
+  const isLead = can('invoices.view');
+  const canEdit = can('invoices.edit');
   const createInvoice = useCreateInvoice();
   const today = todayISO();
   const year = today.slice(0, 4);
@@ -20,7 +22,7 @@ export function Invoices() {
     .map((p) => ({ p, b: billingStatus(p, idx, today) })), [data.projects, idx, today]);
   const suggestions = rows.filter((r) => isActiveProject(r.p) && r.b.unbilled >= 5000).sort((a, b) => b.b.unbilled - a.b.unbilled);
 
-  if (!isLead) return <div className="page"><EmptyState title="Kein Zugriff" text="Rechnungen sind der Projektleitung vorbehalten." /></div>;
+  if (!isLead) return <div className="page"><EmptyState title="Kein Zugriff" text="Für Rechnungen fehlt Ihnen die Berechtigung." /></div>;
 
   const issued = data.invoices.filter((i) => i.status !== 'entwurf' && i.status !== 'storniert');
   const revenueYear = sum(issued.filter((i) => i.date.startsWith(year)), (i) => i.net);
@@ -55,7 +57,7 @@ export function Invoices() {
                     <td className="num"><strong>{fmtEur(b.unbilled)}</strong></td>
                     <td><ProgressBar value={b.billedPerformance / Math.max(1, p.budget || 1)} marker={b.earned / Math.max(1, p.budget || 1)} /><small className="muted">{fmtPct(b.billedPerformance / Math.max(1, p.budget || 1))} abgerechnet</small></td>
                     <td className="small">{b.last ? `${b.last.invoiceNo} · ${b.last.date.split('-').reverse().join('.')}` : 'noch keine'}</td>
-                    <td><button className="btn btn-sm btn-primary" onClick={() => createInvoice(p)} title="Abschlagsrechnung mit aktuellem Leistungsstand erstellen"><FilePlus2 size={14} /> Abschlag</button></td>
+                    <td>{canEdit && <button className="btn btn-sm btn-primary" onClick={() => createInvoice(p)} title="Abschlagsrechnung mit aktuellem Leistungsstand erstellen"><FilePlus2 size={14} /> Abschlag</button>}</td>
                   </tr>
                 ))}
               </tbody>

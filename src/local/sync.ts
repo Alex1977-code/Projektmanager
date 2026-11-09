@@ -29,6 +29,7 @@ const quarter = (iso: string) => `${iso.slice(0, 4)}Q${Math.floor((Number(iso.sl
 const BUCKETED: Record<string, (r: Row) => string> = {
   timeEntries: (r) => `${r.employeeId}_${quarter(String(r.date || '0000-01'))}`,
   allocations: (r) => `${r.employeeId}_${quarter(String(r.weekStart || '0000-01'))}`,
+  worktimes: (r) => `${r.employeeId}_${quarter(String(r.date || '0000-01'))}`,
 };
 const bucketOf = (table: string, row: Row) => (BUCKETED[table] ? BUCKETED[table](row) : String(row.id));
 

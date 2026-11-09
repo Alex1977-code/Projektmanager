@@ -5,7 +5,15 @@ import {
 } from './core.js';
 
 import { ApiError, ANONYMOUS_ADMIN } from './errors.js';
-import { handleAbsences, handleInvoices, isLead, maskAbsences } from './billing.js';
+import { handleAbsences, handleInvoices, maskAbsences } from './billing.js';
+import { abacusExport, assertMonthOpen, handleRoles, handleWorktimeMonths, handleWorktimes } from './worktime.js';
+import { ALL_PERMISSIONS, permissionsFor } from '../shared/permissions.js';
+
+/** Rechte des Benutzers (aus seiner Rolle, ohne Anmeldung: alle). */
+export function permissionSet(db, user) {
+  if (user.anonymous || user.role === 'admin') return new Set(ALL_PERMISSIONS);
+  return new Set(permissionsFor(user.role, list(db, 'roles')));
+}
 
 export { ApiError };
 
@@ -140,37 +148,68 @@ function queryTimeEntries(db, q) {
  * Zentrale Routing-Funktion.
  * @returns {Promise<any>|any} Antwortobjekt (wird als JSON gesendet)
  */
-export function handle(db, method, pathname, query, body, user = ANONYMOUS_ADMIN) {
+export function handle(db, method, pathname, query = {}, body, user = ANONYMOUS_ADMIN) {
   const parts = pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
   const [resource, idOrAction] = parts;
   const write = method !== 'GET';
-  const lead = isLead(user);
   const deny = (msg) => { throw new ApiError(403, msg); };
 
   if (resource === 'health') return { ok: true, time: new Date().toISOString() };
 
-  // ------------------------------------------------------------ Berechtigungen
-  if (resource === 'export' && user.role !== 'admin') deny('Der Datenexport ist der Administration vorbehalten.');
-  if (resource === 'settings' && write && user.role !== 'admin') deny('Einstellungen kann nur die Administration ändern.');
-  if (resource === 'employees' && write && user.role !== 'admin') deny('Mitarbeiterdaten kann nur die Administration ändern.');
-  if (['projects', 'phases', 'costs', 'allocations'].includes(resource) && write && !lead) {
-    deny('Projektstammdaten, Termine, Kosten und Ressourcen ändert die Projektleitung.');
+  // ------------------------------------------------------------ Berechtigungen (Rollen)
+  const perms = permissionSet(db, user);
+  const can = (p) => perms.has(p);
+  const need = (p, msg) => { if (!can(p)) deny(msg); };
+  if (resource === 'export') need('data.export', 'Der Gesamtdatenexport ist nicht freigegeben.');
+  if (resource === 'settings' && write) need('settings.edit', 'Keine Berechtigung, Einstellungen zu ändern.');
+  if (resource === 'employees' && write) need('employees.edit', 'Keine Berechtigung, Mitarbeiterdaten zu ändern.');
+  if (resource === 'employees' && (method === 'POST' || method === 'PUT' || method === 'PATCH') && body?.appRole !== undefined && !can('roles.edit')) {
+    // Rollen zuweisen nur mit Rollenrecht – sonst könnte man sich selbst höhere Rechte geben
+    const current = idOrAction ? get(db, 'employees', Number(idOrAction))?.appRole : 'mitarbeiter';
+    if ((body.appRole || 'mitarbeiter') !== (current || 'mitarbeiter')) deny('Rollen darf nur zuweisen, wer Rollen und Rechte verwalten darf.');
   }
-  if (resource === 'timeEntries' && write && !lead && Number(body?.employeeId) !== user.employeeId) {
-    deny('Zeiten können nur für die eigene Person erfasst werden.');
+  if (resource === 'projects' && method === 'DELETE') need('projects.delete', 'Keine Berechtigung, Projekte zu löschen.');
+  else if (resource === 'projects' && write) need('projects.edit', 'Keine Berechtigung, Projekte anzulegen oder zu ändern.');
+  if ((resource === 'phases' || resource === 'milestones') && write) need('schedule.edit', 'Keine Berechtigung, den Terminplan zu ändern.');
+  if (resource === 'costs' && write) need('costs.edit', 'Keine Berechtigung, Kosten zu erfassen.');
+  if (resource === 'allocations' && write) need('resources.edit', 'Keine Berechtigung, die Ressourcenplanung zu ändern.');
+  if (resource === 'tasks' && write) need('tasks.edit', 'Keine Berechtigung, Aufgaben zu bearbeiten.');
+  if (resource === 'protocols' && write) need('protocols.edit', 'Keine Berechtigung, Protokolle zu bearbeiten.');
+  if (resource === 'timeEntries') {
+    const target = write ? body?.employeeId : query.employeeId;
+    if ((write || target !== undefined) && Number(target) !== user.employeeId && !can('time.all')) deny('Zeiten anderer Personen sind nicht freigegeben.');
+    if (!write && target === undefined && !can('time.all')) query = { ...query, employeeId: String(user.employeeId ?? -1) };
+    if (write && body?.date) assertMonthOpen(db, user, can, body.employeeId, body.date);
   }
 
   if (resource === 'bootstrap' && method === 'GET') {
     const out = { settings: getSettings(db) };
     for (const t of BOOTSTRAP_TABLES) out[t] = list(db, t);
-    out.invoices = lead ? list(db, 'invoices') : [];
-    out.absences = maskAbsences(out.absences, user);
+    out.invoices = can('invoices.view') ? list(db, 'invoices') : [];
+    out.absences = maskAbsences(out.absences, user, can('absences.details'));
+    out.roles = list(db, 'roles').sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+    out.worktimeMonths = handleWorktimeMonths(db, 'GET', null, {}, null, user, can);
     out.summary = summary(db);
+    if (!can('costs.view')) {
+      // Stundensätze und Personalkosten nur mit Kostenrecht
+      out.employees = out.employees.map((e) => ({ ...e, hourlyRate: null }));
+      for (const k of ['byPhase', 'byEmployee']) out.summary[k] = out.summary[k].map((r) => ({ ...r, cost: 0 }));
+    }
+    out.me = { employeeId: user.employeeId ?? null, role: user.role, permissions: [...perms] };
     return out;
   }
 
-  if (resource === 'invoices') return handleInvoices(db, method, idOrAction ? Number(idOrAction) : null, body, user, validate);
-  if (resource === 'absences') return handleAbsences(db, method, idOrAction ? Number(idOrAction) : null, body, user, validate);
+  if (resource === 'invoices') return handleInvoices(db, method, idOrAction ? Number(idOrAction) : null, body, user, validate, can);
+  if (resource === 'absences') return handleAbsences(db, method, idOrAction ? Number(idOrAction) : null, body, user, validate, can);
+  if (resource === 'worktimes') return handleWorktimes(db, method, idOrAction, query, body, user, can);
+  if (resource === 'worktimeMonths') return handleWorktimeMonths(db, method, idOrAction, query, body, user, can);
+  if (resource === 'roles') return handleRoles(db, method, idOrAction ? Number(idOrAction) : null, body, user, can);
+  if (resource === 'abacus' && idOrAction === 'export' && method === 'POST') return abacusExport(db, body, user, can);
+  if (resource === 'abacusExports' && method === 'GET') {
+    need('abacus.export', 'Keine Berechtigung für den Abacus-Export.');
+    return list(db, 'abacusExports').sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  if (resource === 'abacusExports') throw new ApiError(405, 'Methode nicht erlaubt');
 
   if (resource === 'summary' && method === 'GET') return summary(db);
 

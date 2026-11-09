@@ -8,7 +8,8 @@ import { projectMetrics } from '../utils/metrics';
 import type { Milestone, Phase } from '../types';
 
 export function Schedule() {
-  const { data, idx, update, isLead } = useStore();
+  const { data, idx, update, can } = useStore();
+  const isLead = can('schedule.edit');
   const [scale, setScale] = useState<GanttScale>('month');
   const [scope, setScope] = useState<'laufend' | 'alle'>('laufend');
   const [lead, setLead] = useState('');

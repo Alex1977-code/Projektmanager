@@ -15,12 +15,12 @@ export const SCHEMA = {
     name: 'text', short: 'text', title: 'text', role: 'text', department: 'text',
     email: 'text', phone: 'text', hourlyRate: 'real', weeklyHours: 'real',
     skills: 'json', color: 'text', active: 'bool',
-    login: 'text', appRole: 'text', vacationDays: 'real',
+    login: 'text', appRole: 'text', vacationDays: 'real', personnelNo: 'text',
   },
   projects: {
     number: 'text', name: 'text', client: 'text', type: 'text', location: 'text',
     leadId: 'int', status: 'text', priority: 'text', startDate: 'text', endDate: 'text',
-    budget: 'real', description: 'text', color: 'text',
+    budget: 'real', description: 'text', color: 'text', extNo: 'text',
   },
   phases: {
     projectId: 'int', code: 'text', name: 'text', startDate: 'text', endDate: 'text',
@@ -35,7 +35,7 @@ export const SCHEMA = {
   allocations: { employeeId: 'int', projectId: 'int', weekStart: 'text', hours: 'real' },
   timeEntries: {
     employeeId: 'int', projectId: 'int', phaseId: 'int', taskId: 'int',
-    date: 'text', hours: 'real', note: 'text',
+    date: 'text', hours: 'real', note: 'text', exportedAt: 'text',
   },
   costs: {
     projectId: 'int', phaseId: 'int', date: 'text', category: 'text',
@@ -56,6 +56,15 @@ export const SCHEMA = {
     previousNet: 'real', net: 'real', vat: 'real', gross: 'real', status: 'text', dueDate: 'text',
     paidDate: 'text', paidAmount: 'real', note: 'text', createdBy: 'int',
   },
+  roles: { key: 'text', name: 'text', description: 'text', permissions: 'json', system: 'bool', sort: 'int' },
+  worktimes: {
+    employeeId: 'int', date: 'text', start: 'text', end: 'text', breakMin: 'real', location: 'text', note: 'text',
+  },
+  worktimeMonths: {
+    employeeId: 'int', month: 'text', status: 'text', submittedAt: 'text', approvedBy: 'int', approvedAt: 'text',
+    exportedAt: 'text', note: 'text',
+  },
+  abacusExports: { type: 'text', period: 'text', createdAt: 'text', createdBy: 'int', count: 'int', hours: 'real', filename: 'text' },
 };
 
 /** Pflichtfelder je Tabelle (für POST). */
@@ -71,6 +80,10 @@ export const REQUIRED = {
   protocols: ['projectId', 'date'],
   absences: ['type', 'startDate', 'endDate'],
   invoices: ['projectId', 'date'],
+  roles: ['key', 'name'],
+  worktimes: ['employeeId', 'date'],
+  worktimeMonths: ['employeeId', 'month'],
+  abacusExports: ['type', 'period'],
 };
 
 
@@ -174,6 +187,28 @@ export const DEFAULT_SETTINGS = {
   nkPct: 5,
   vatPct: 19,
   paymentDays: 30,
+  /** Abacus-Schnittstelle (Export-Datei für den Import in Abacus) */
+  abacus: {
+    mandant: '',
+    separator: ';',
+    decimal: ',',
+    dateFormat: 'DD.MM.YYYY',
+    encoding: 'utf-8-bom',
+    onlyApproved: true,
+    defaultServiceType: '100',
+    serviceTypes: { 'LPH 1': '101', 'LPH 2': '102', 'LPH 3': '103', 'LPH 4': '104', 'LPH 5': '105', 'LPH 6': '106', 'LPH 7': '107', 'LPH 8': '108', 'LPH 9': '109', WP: '120', BWP: '130' },
+    absenceCodes: { Urlaub: 'U', Krankheit: 'K', Fortbildung: 'F', Gleitzeit: 'G', Sonderurlaub: 'S', Sonstiges: 'A', holiday: 'FT' },
+    leistungColumns: [
+      { key: 'mandant', header: 'Mandant' }, { key: 'personnelNo', header: 'Mitarbeiter' }, { key: 'date', header: 'Datum' },
+      { key: 'projectNo', header: 'Projekt' }, { key: 'serviceType', header: 'Leistungsart' }, { key: 'hours', header: 'Menge' },
+      { key: 'text', header: 'Text' },
+    ],
+    arbeitszeitColumns: [
+      { key: 'personnelNo', header: 'Mitarbeiter' }, { key: 'date', header: 'Datum' }, { key: 'start', header: 'Von' },
+      { key: 'end', header: 'Bis' }, { key: 'breakMin', header: 'Pause' }, { key: 'hours', header: 'Stunden' },
+      { key: 'absence', header: 'Absenz' },
+    ],
+  },
 };
 
 export function getSettings(db) {

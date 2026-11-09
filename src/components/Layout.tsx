@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, CalendarRange, ChevronDown, Clock, CornerDownLeft, FolderKanban, LayoutDashboard,
-  ListChecks, LogOut, Menu, NotebookPen, Palmtree, Plus, Receipt, Search, Settings, Users, Gauge, X,
+  ListChecks, LogOut, Menu, ShieldCheck, Timer, NotebookPen, Palmtree, Plus, Receipt, Search, Settings, Users, Gauge, X,
 } from 'lucide-react';
 import { useStore } from '../store';
 import { Avatar } from './ui';
@@ -22,15 +22,16 @@ const NAV = [
   { to: '/ressourcen', label: 'Ressourcen', icon: Gauge },
   { to: '/aufgaben', label: 'Aufgaben', icon: ListChecks },
   { to: '/protokolle', label: 'Protokolle', icon: NotebookPen },
-  { to: '/zeiten', label: 'Zeiterfassung', icon: Clock },
-  { to: '/controlling', label: 'Kosten & Controlling', icon: BarChart3 },
-  { to: '/rechnungen', label: 'Rechnungen', icon: Receipt, lead: true },
+  { to: '/zeiten', label: 'Projektzeiten', icon: Clock },
+  { to: '/arbeitszeit', label: 'Arbeitszeit', icon: Timer },
+  { to: '/controlling', label: 'Kosten & Controlling', icon: BarChart3, perm: 'costs.view' },
+  { to: '/rechnungen', label: 'Rechnungen', icon: Receipt, perm: 'invoices.view' },
   { to: '/abwesenheiten', label: 'Abwesenheiten', icon: Palmtree },
   { to: '/team', label: 'Team', icon: Users },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { data, me, isLead, isAdmin } = useStore();
+  const { data, me, can } = useStore();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [quick, setQuick] = useState<'task' | 'project' | null>(null);
@@ -68,11 +69,11 @@ export function Layout({ children }: { children: ReactNode }) {
           <button className="icon-btn nav-close" onClick={() => setNavOpen(false)} aria-label="Menü schließen"><X size={18} /></button>
         </div>
         <nav className="nav">
-          {NAV.filter((n) => !('lead' in n) || isLead).map((n) => (
+          {NAV.filter((n) => !('perm' in n) || can(n.perm as string)).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setNavOpen(false)} className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
               <n.icon size={18} />
               <span>{n.label}</span>
-              {n.to === '/abwesenheiten' && isLead && pendingAbs > 0 && (
+              {n.to === '/abwesenheiten' && can('absences.approve') && pendingAbs > 0 && (
                 <span className="nav-count" title={`${pendingAbs} offene Anträge`}>{pendingAbs}</span>
               )}
               {n.to === '/aufgaben' && myOpen.length > 0 && (
@@ -82,7 +83,10 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="nav-bottom">
-          {isAdmin && <NavLink to="/einstellungen" onClick={() => setNavOpen(false)} className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
+          {can('roles.edit') && <NavLink to="/rollen" onClick={() => setNavOpen(false)} className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
+            <ShieldCheck size={18} /><span>Rollen &amp; Rechte</span>
+          </NavLink>}
+          {(can('settings.edit') || can('data.export')) && <NavLink to="/einstellungen" onClick={() => setNavOpen(false)} className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
             <Settings size={18} /><span>Einstellungen</span>
           </NavLink>}
         </div>
@@ -100,8 +104,8 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="topbar-actions">
             {SyncChip && <Suspense fallback={null}><SyncChip /></Suspense>}
             <div className="quick-add">
-              <button className="btn btn-primary btn-sm" onClick={() => setQuick('task')}><Plus size={16} /> Aufgabe</button>
-              {isLead && <button className="btn btn-sm" onClick={() => setQuick('project')}><Plus size={16} /> Projekt</button>}
+              {can('tasks.edit') && <button className="btn btn-primary btn-sm" onClick={() => setQuick('task')}><Plus size={16} /> Aufgabe</button>}
+              {can('projects.edit') && <button className="btn btn-sm" onClick={() => setQuick('project')}><Plus size={16} /> Projekt</button>}
             </div>
             <UserMenu />
           </div>
@@ -110,7 +114,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </div>
 
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
-      {quick === 'task' && <TaskForm defaults={{ assigneeId: me?.id }} onClose={() => setQuick(null)} />}
+      {quick === 'task' && can('tasks.edit') && <TaskForm defaults={{ assigneeId: me?.id }} onClose={() => setQuick(null)} />}
       {quick === 'project' && <ProjectForm onClose={() => setQuick(null)} onSaved={(p) => navigate(`/projekte/${p.id}`)} />}
     </div>
   );

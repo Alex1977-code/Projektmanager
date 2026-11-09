@@ -19,8 +19,11 @@ ohne Installation an den Arbeitsplätzen.
 | **Protokolle** | Besprechungsprotokolle je Projekt (Planungs-/Baubesprechung, Jour fixe, Werksabnahme, Abnahme …) mit Tagesordnung, Punkten **I / F / A**, Verantwortlichen und Terminen; offene Punkte aus dem Vorgängerprotokoll übernehmen; A-Punkte als Aufgaben anlegen; projektübergreifende Liste offener Punkte; Druck/PDF im Protokolllayout, Verteilung per E-Mail; automatisches Speichern |
 | **Abwesenheiten** | Urlaub, Krankheit, Fortbildung, Gleitzeit, Sonderurlaub, Betriebsruhe; Monatskalender fürs Team, Urlaubsanträge mit Genehmigung durch die Leitung, Urlaubskonto (Arbeitstage ohne Feiertage), gesetzliche Feiertage je Bundesland. **Die verfügbare Kapazität wird automatisch reduziert** – in Ressourcenplanung, Cockpit, Engpässen, Team-Auslastung und Wochen-Soll der Zeiterfassung |
 | **Rechnungen** | Abschlags-, Teilschluss- und Schlussrechnungen nach **§ 15 HOAI**: Leistungsstand je Leistungsphase (vorbelegt aus dem Fertigstellungsgrad), Besondere Leistungen/Nachträge, Nebenkostenpauschale, Abzug bisheriger Abschläge, USt; fortlaufende Rechnungsnummern erst beim Stellen, danach festgeschrieben (nur Storno); Zahlungseingänge, offene Posten, Überfälligkeit, **Abrechnungsvorschlag** für erbrachte, aber nicht abgerechnete Leistungen; Druck/PDF im Rechnungslayout |
-| **Anmeldung & Rechte** | Anmeldung über **Active Directory** (LDAP/LDAPS) oder **Windows-Single-Sign-on** über den Firmen-Webserver; Rollen Administration / Projektleitung & Controlling / Mitarbeiter/in, serverseitig durchgesetzt |
-| **Zeiterfassung** | Wochenstundenzettel je Projekt und Leistungsphase; geplante Stunden als Vorschlag |
+| **Anmeldung** | Anmeldung über **Active Directory** (LDAP/LDAPS) oder **Windows-Single-Sign-on** über den Firmen-Webserver |
+| **Rollen & Rechte** | Rechte-Matrix mit 19 Einzelrechten (Projekte, Termine, Ressourcen, Kosten, Rechnungen, Abwesenheiten, Arbeitszeit-Freigabe, Abacus-Export, Einstellungen …); Standardrollen Administration, Projektleitung, Controlling/Buchhaltung, Mitarbeiter/in, Extern; **eigene Rollen** anlegen; Zuweisung je Person oder über **AD-Gruppen**; serverseitig durchgesetzt (Stundensätze, Kosten und Rechnungen werden ohne Recht gar nicht ausgeliefert) |
+| **Projektzeiten** | Wochenstundenzettel je Projekt und Leistungsphase; geplante Stunden als Vorschlag |
+| **Arbeitszeit** | **Stempeluhr** (Kommen/Gehen mit Arbeitsort, auch am Handy) und Monatsliste zum direkten Eintragen; Soll/Ist, Gleitzeitkonto, Gutschrift für Urlaub/Krankheit; Prüfung nach **Arbeitszeitgesetz** (§ 3 max. 10 h, § 4 Pausen 30/45 min – beim Ausstempeln automatisch ergänzt, § 5 Ruhezeit 11 h, § 9 Sonn-/Feiertage); Abgleich mit gebuchten Projektzeiten; **Monatsabschluss** (einreichen → freigeben/zurückgeben), danach gesperrt |
+| **Abacus-Schnittstelle** | Exportdatei (CSV) für **Projektzeiten / Leistungserfassung** (Personalnr., Datum, Abacus-Projektnr., Leistungsart je Leistungsphase, Stunden, Text) und **Arbeitszeiten** (Von/Bis/Pause/Stunden/Absenzcode) – nur freigegebene Monate, Vorschau mit Warnungen (fehlende Personal-/Projektnummern), Exportprotokoll, Kennzeichnung „übergeben“; Spalten, Reihenfolge, Trennzeichen, Dezimal- und Datumsformat, Zeichensatz, Mandant, Leistungsarten und Absenzcodes frei konfigurierbar |
 | **Kosten & Controlling** | Budget, Ist-Kosten (Stunden × Verrechnungssatz + Fremdkosten), Leistungswert, CPI, Prognose (Earned-Value-Methode) je Projekt und Phase; CSV-Export für Excel |
 | **Team** | Mitarbeitende mit Rolle, Abteilung, Qualifikationen, Verrechnungssatz, Wochenarbeitszeit und Auslastung |
 
@@ -87,6 +90,7 @@ LDAP_BIND_PASSWORD=…
 # optional: Rollen über AD-Gruppen (Name oder vollständiger DN)
 LDAP_GROUP_ADMIN=PM-Administration
 LDAP_GROUP_LEITUNG=PM-Projektleitung
+LDAP_ROLE_GROUPS=controlling=PM-Controlling;extern=PM-Extern   # weitere/eigene Rollen: Schlüssel=Gruppe
 LDAP_CA_FILE=/etc/ssl/firma-root-ca.pem    # Stammzertifikat der Firmen-CA, falls nötig
 ```
 
@@ -105,11 +109,30 @@ Die Zuordnung zum Mitarbeiterprofil erfolgt über den **Windows-Anmeldenamen** (
 Mit `ADMIN_PASSWORD=…` lässt sich zusätzlich ein **Notfall-Administrator** `admin` aktivieren (z. B. für die
 Ersteinrichtung oder bei Ausfall des Domänencontrollers).
 
-| Rolle | Rechte |
+| Standardrolle | Rechte (unter **Rollen & Rechte** anpassbar) |
 |---|---|
-| Administration | alles, inkl. Einstellungen, Mitarbeiterdaten, Datenexport |
-| Projektleitung / Controlling | Projekte, Termine, Ressourcen, Kosten, **Rechnungen**, Genehmigung von Abwesenheiten, Zeiten für andere |
-| Mitarbeiter/in | Aufgaben, Protokolle, eigene Zeiterfassung, eigene Urlaubsanträge; Krankheitsgründe von Kolleg/innen werden nicht angezeigt |
+| Administration | immer alle Rechte |
+| Projektleitung | Projekte, Termine, Aufgaben, Protokolle, Ressourcen, Abwesenheiten genehmigen, Zeiten aller, Arbeitszeit freigeben, Kosten, Rechnungen |
+| Controlling / Buchhaltung | Kosten, Rechnungen, Zeiten aller, Arbeitszeit freigeben, **Abacus-Export**, Abwesenheiten genehmigen, Aufgaben/Protokolle |
+| Mitarbeiter/in | Aufgaben und Protokolle bearbeiten; eigene Projekt- und Arbeitszeiten, eigene Urlaubsanträge; keine Stundensätze/Kosten/Rechnungen; Krankheitsgründe von Kolleg/innen werden nicht angezeigt |
+| Extern | nur lesen, eigene Zeiten |
+
+Die Rolle kommt aus dem Mitarbeiterprofil („Berechtigung“) oder – vorrangig – aus den AD-Gruppen. Nur wer das Recht
+„Rollen & Rechte verwalten“ hat, darf Rollen zuweisen. **Ohne Anmeldung (`AUTH_MODE=none`, veröffentlichte Version)
+haben alle Personen alle Rechte.**
+
+### Arbeitszeit und Abacus
+
+1. Mitarbeitende stempeln (oder tragen Beginn/Ende/Pause ein) und reichen den Monat ein.
+2. Projektleitung/Controlling gibt unter **Arbeitszeit → Freigaben** frei oder gibt zurück; freigegebene Monate sind gesperrt.
+3. Controlling erzeugt unter **Arbeitszeit → Abacus-Export** die Importdatei für den Vormonat und liest sie in Abacus ein
+   (Leistungserfassung AbaProject bzw. Lohn/HR).
+
+Die Vorlage der Exportdatei muss zur **Importdefinition Ihrer Abacus-Installation** passen – Spalten, Reihenfolge,
+Trennzeichen, Datumsformat sowie die Codes für Leistungsarten und Absenzen sind deshalb unter „Schnittstelle
+konfigurieren“ einstellbar (mit Beispielzeile). Voraussetzung: **Personalnummer** je Mitarbeiter/in (Team) und
+**Abacus-Projektnummer** je Projekt (Projekt bearbeiten); fehlende Nummern werden in der Vorschau gemeldet.
+Eine direkte Online-Verbindung (Abacus REST-API) ist nicht enthalten.
 
 Sicherheit: Sitzungen als HttpOnly-Cookie (Standard 12 h, `SESSION_HOURS`), Schutz gegen Cross-Site-Request-Forgery,
 Sperre nach 8 Fehlversuchen für 15 Minuten. **Im Betrieb mit Kennwort-Anmeldung die Seite nur per HTTPS bereitstellen**
@@ -142,8 +165,11 @@ server/            Node.js-HTTP-Server ohne Framework-Abhängigkeiten
   seedProtocols.js Beispielprotokolle
   seedExtra.js     Beispiel-Abwesenheiten und -Rechnungen
   auth.js          Anmeldung (Active Directory, Windows-SSO), Sitzungen
-  billing.js       Abschlagsrechnungen nach § 15 HOAI, Abwesenheiten, Rechte
+  billing.js       Abschlagsrechnungen nach § 15 HOAI, Abwesenheiten
+  worktime.js      Arbeitszeit, Monatsabschluss, Rollen, Abacus-Export
 shared/holidays.js Gesetzliche Feiertage je Bundesland (Server und Oberfläche)
+shared/permissions.js  Rechte und Standardrollen
+shared/worktime.js Arbeitszeitgesetz-Prüfungen
   api.test.js      Tests (node:test) – laufen gegen SQLite und den Browser-Speicher
 src/               React 19 + TypeScript (Vite)
   store.tsx        zentraler Datenzustand mit optimistischen Updates und Live-Aktualisierung
@@ -152,7 +178,7 @@ src/               React 19 + TypeScript (Vite)
   utils/taskTemplates.ts  Aufgabenkataloge HOAI / Werkstattplanung / Bauwerksprüfung
   utils/protocols.ts      Nummerierung, offene Punkte, Übernahme in Folgeprotokolle
   components/      Gantt, Kanban, Ressourcenraster, Diagramme, Formulare
-  pages/           Cockpit, Projekte, Terminplanung, Ressourcen, Aufgaben, Zeiten, Controlling, Team
+  pages/           Cockpit, Projekte, Terminplanung, Ressourcen, Aufgaben, Zeiten, Arbeitszeit, Controlling, Team, Rollen
 ```
 
 ### Kennzahlenmodell
@@ -169,4 +195,5 @@ src/               React 19 + TypeScript (Vite)
   und können als Abwesenheit „für alle“ eingetragen werden.
 - Rechnungen werden im Programm erzeugt und gedruckt; eine Übergabe an die Finanzbuchhaltung (z. B. DATEV) oder
   E-Rechnung (XRechnung/ZUGFeRD) ist nicht enthalten.
-- Denkbar: Dokumentenablage je Projekt, E-Mail-Benachrichtigung bei Urlaubsanträgen, XRechnung-Export.
+- Denkbar: Dokumentenablage je Projekt, E-Mail-Benachrichtigung bei Urlaubsanträgen, XRechnung-Export,
+  direkte Abacus-Anbindung über die Abacus REST-API (statt Dateiübergabe).

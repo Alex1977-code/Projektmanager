@@ -6,7 +6,6 @@ const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const addDays = (s, n) => new Date(Date.parse(s + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
 
-export const isLead = (u) => u.role === 'admin' || u.role === 'leitung';
 
 /**
  * Rechnet eine Abschlagsrechnung:
@@ -51,9 +50,10 @@ function nextInvoiceNo(db, date) {
 const FROZEN_EDITABLE = ['status', 'paidDate', 'paidAmount', 'note', 'dueDate'];
 const STATUS = ['entwurf', 'gestellt', 'bezahlt', 'storniert'];
 
-export function handleInvoices(db, method, id, body, user, validate) {
-  if (!isLead(user)) throw new ApiError(403, 'Rechnungen sind der Projektleitung und Geschäftsführung vorbehalten.');
+export function handleInvoices(db, method, id, body, user, validate, can) {
+  if (!can('invoices.view')) throw new ApiError(403, 'Keine Berechtigung, Rechnungen einzusehen.');
   if (method === 'GET') return id ? get(db, 'invoices', id) : list(db, 'invoices');
+  if (!can('invoices.edit')) throw new ApiError(403, 'Keine Berechtigung, Rechnungen zu bearbeiten.');
 
   if (method === 'POST' && !id) {
     validate('invoices', body, false);
@@ -118,22 +118,23 @@ export function handleInvoices(db, method, id, body, user, validate) {
 export const ABSENCE_TYPES = ['Urlaub', 'Krankheit', 'Fortbildung', 'Gleitzeit', 'Sonderurlaub', 'Sonstiges'];
 
 /** Datenschutz: Mitarbeiter sehen bei Kolleg/innen nur „abwesend“, keinen Krankheitsgrund und keine Notizen. */
-export function maskAbsences(rows, user) {
-  if (isLead(user)) return rows;
+export function maskAbsences(rows, user, seeDetails) {
+  if (seeDetails) return rows;
   return rows.map((a) => (a.employeeId !== null && a.employeeId !== user.employeeId
     ? { ...a, type: a.type === 'Krankheit' ? 'Sonstiges' : a.type, note: '' }
     : a));
 }
 
-export function handleAbsences(db, method, id, body, user, validate) {
-  if (method === 'GET') return id ? maskAbsences([get(db, 'absences', id)].filter(Boolean), user)[0] ?? null : maskAbsences(list(db, 'absences'), user);
-  const lead = isLead(user);
+export function handleAbsences(db, method, id, body, user, validate, can) {
+  const details = can('absences.details');
+  if (method === 'GET') return id ? maskAbsences([get(db, 'absences', id)].filter(Boolean), user, details)[0] ?? null : maskAbsences(list(db, 'absences'), user, details);
+  const lead = can('absences.approve');
 
   if (method === 'POST' && !id) {
     validate('absences', body, false);
     if (!ABSENCE_TYPES.includes(body.type)) throw new ApiError(400, 'Unbekannte Abwesenheitsart');
     const employeeId = body.employeeId === null || body.employeeId === undefined || body.employeeId === '' ? null : Number(body.employeeId);
-    if (!lead && employeeId !== user.employeeId) throw new ApiError(403, 'Abwesenheiten anderer Personen kann nur die Projektleitung/Geschäftsführung eintragen.');
+    if (!lead && employeeId !== user.employeeId) throw new ApiError(403, 'Keine Berechtigung, Abwesenheiten für andere einzutragen.');
     let status = body.status || (lead || body.type === 'Krankheit' ? 'genehmigt' : 'beantragt');
     if (!lead && status !== 'beantragt' && body.type !== 'Krankheit') status = 'beantragt';
     if (body.halfDay && body.startDate !== body.endDate) throw new ApiError(400, 'Halbe Tage nur für eintägige Abwesenheiten');

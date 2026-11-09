@@ -17,10 +17,60 @@ export interface Employee {
   login: string | null;
   appRole: Role | null;
   vacationDays: number | null;
+  personnelNo: string | null;
 }
 
-export type Role = 'admin' | 'leitung' | 'mitarbeiter';
-export const ROLE_LABEL: Record<Role, string> = { admin: 'Administration', leitung: 'Projektleitung / Controlling', mitarbeiter: 'Mitarbeiter/in' };
+export type Role = string;
+export const ROLE_LABEL: Record<string, string> = { admin: 'Administration', leitung: 'Projektleitung', controlling: 'Controlling / Buchhaltung', mitarbeiter: 'Mitarbeiter/in', extern: 'Werkstudent/in / Extern' };
+
+export interface RoleDef {
+  id: ID;
+  key: string;
+  name: string;
+  description: string | null;
+  permissions: string[];
+  system: boolean;
+  sort: number | null;
+}
+
+export interface Worktime {
+  id: ID;
+  employeeId: ID;
+  date: string;
+  start: string | null;
+  end: string | null;
+  breakMin: number | null;
+  location: string | null;
+  note: string | null;
+}
+
+export type MonthStatus = 'offen' | 'eingereicht' | 'freigegeben';
+export interface WorktimeMonth {
+  id: ID;
+  employeeId: ID;
+  month: string;
+  status: MonthStatus;
+  submittedAt: string | null;
+  approvedBy: ID | null;
+  approvedAt: string | null;
+  exportedAt: string | null;
+  note: string | null;
+}
+
+export interface AbacusColumn { key: string; header: string }
+export interface AbacusConfig {
+  mandant: string;
+  separator: string;
+  decimal: string;
+  dateFormat: string;
+  encoding: string;
+  onlyApproved: boolean;
+  defaultServiceType: string;
+  serviceTypes: Record<string, string>;
+  absenceCodes: Record<string, string>;
+  leistungColumns: AbacusColumn[];
+  arbeitszeitColumns: AbacusColumn[];
+}
 
 export const PROJECT_STATUS = ['Akquise', 'Beauftragt', 'In Bearbeitung', 'Pausiert', 'Abgeschlossen'] as const;
 export type ProjectStatus = (typeof PROJECT_STATUS)[number];
@@ -45,6 +95,7 @@ export interface Project {
   budget: number | null;
   description: string | null;
   color: string | null;
+  extNo: string | null;
 }
 
 export interface Phase {
@@ -231,6 +282,7 @@ export interface Settings {
   nkPct: number;
   vatPct: number;
   paymentDays: number;
+  abacus: AbacusConfig;
 }
 
 export interface SessionUser {
@@ -266,8 +318,11 @@ export interface Data {
   protocols: Protocol[];
   absences: Absence[];
   invoices: Invoice[];
+  roles: RoleDef[];
+  worktimeMonths: WorktimeMonth[];
+  me: { employeeId: ID | null; role: string; permissions: string[] };
   summary: Summary;
 }
 
-export type Collection = 'employees' | 'projects' | 'phases' | 'milestones' | 'tasks' | 'allocations' | 'costs' | 'protocols' | 'absences' | 'invoices';
+export type Collection = 'employees' | 'projects' | 'phases' | 'milestones' | 'tasks' | 'allocations' | 'costs' | 'protocols' | 'absences' | 'invoices' | 'roles' | 'worktimeMonths';
 export type EntityOf<C extends Collection> = Data[C][number];

@@ -14,7 +14,8 @@ import { sortTasks } from '../components/Kanban';
 import { dayOff, weekCapacity } from '../utils/capacity';
 
 export function Dashboard() {
-  const { data, idx, me, update } = useStore();
+  const { data, idx, me, update, can } = useStore();
+  const seeCosts = can('costs.view');
   const navigate = useNavigate();
   const [editTask, setEditTask] = useState<Task | null>(null);
   const today = todayISO();
@@ -74,8 +75,8 @@ export function Dashboard() {
       <div className="kpi-grid">
         <Kpi label="Laufende Projekte" icon={<Briefcase size={18} />} value={active.length}
           sub={`${data.projects.filter((p) => p.status === 'Akquise').length} in Akquise · ${data.projects.filter((p) => p.status === 'Abgeschlossen').length} abgeschlossen`} />
-        <Kpi label="Honorarvolumen laufend" icon={<Wallet size={18} />} value={fmtEurCompact(volume)}
-          sub={`Ist-Kosten bisher ${fmtEurCompact(actualActive)} (${fmtPct(actualActive / Math.max(1, volume))})`} />
+        {seeCosts && <Kpi label="Honorarvolumen laufend" icon={<Wallet size={18} />} value={fmtEurCompact(volume)}
+          sub={`Ist-Kosten bisher ${fmtEurCompact(actualActive)} (${fmtPct(actualActive / Math.max(1, volume))})`} />}
         <Kpi label="Auslastung nächste 4 Wochen" icon={<Gauge size={18} />} value={fmtPct(util4)}
           tone={util4 > 1 ? 'bad' : util4 > 0.9 ? 'warn' : 'default'}
           sub={<><span>{bottlenecks.length} Person(en) überplant</span></>} />
@@ -96,9 +97,9 @@ export function Dashboard() {
                   <th>Projekt</th>
                   <th>PL</th>
                   <th style={{ width: 150 }}>Fortschritt (Ist / Soll)</th>
-                  <th style={{ width: 170 }}>Kosten / Budget</th>
+                  {seeCosts && <th style={{ width: 170 }}>Kosten / Budget</th>}
                   <th>Termine</th>
-                  <th>Kosten</th>
+                  {seeCosts && <th>Kosten</th>}
                   <th>Nächster Meilenstein</th>
                 </tr>
               </thead>
@@ -121,12 +122,12 @@ export function Dashboard() {
                         <ProgressBar value={m.progress} marker={m.plannedProgress} label="Fertigstellung" />
                         <small className="muted">{fmtPct(m.progress)} / Soll {fmtPct(m.plannedProgress)}</small>
                       </td>
-                      <td>
+                      {seeCosts && <td>
                         <BulletBar budget={p.budget || 0} actual={m.actualCost} forecast={m.eac} scaleMax={maxBudget} />
                         <small className="muted">{fmtEurCompact(m.actualCost)} von {fmtEurCompact(p.budget)}</small>
-                      </td>
+                      </td>}
                       <td><AmpelBadge value={m.scheduleStatus} compact /></td>
-                      <td><AmpelBadge value={m.costStatus} compact /></td>
+                      {seeCosts && <td><AmpelBadge value={m.costStatus} compact /></td>}
                       <td>
                         {m.nextMilestone ? (
                           <div className="ms-cell"><strong>{m.nextMilestone.name}</strong><small>{fmtDate(m.nextMilestone.date)} · {relDays(m.nextMilestone.date)}</small></div>

@@ -18,7 +18,9 @@ function readView(): 'table' | 'cards' {
 }
 
 export function Projects() {
-  const { data, idx, isLead } = useStore();
+  const { data, idx, can } = useStore();
+  const isLead = can('projects.edit');
+  const seeCosts = can('costs.view');
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<StatusFilter>('laufend');
@@ -101,9 +103,9 @@ export function Projects() {
                   <th>Typ</th>
                   <th>PL</th>
                   <th>Zeitraum</th>
-                  <th className="num">Honorar</th>
+                  {seeCosts && <th className="num">Honorar</th>}
                   <th style={{ width: 140 }}>Fortschritt</th>
-                  <th style={{ width: 150 }}>Kosten</th>
+                  {seeCosts && <th style={{ width: 150 }}>Kosten</th>}
                   <th>Ampel</th>
                   <th>Status</th>
                 </tr>
@@ -123,9 +125,9 @@ export function Projects() {
                       <td>{p.type}</td>
                       <td><Avatar employee={idx.employeeById.get(p.leadId || 0)} size={26} /></td>
                       <td className="nowrap">{fmtDate(p.startDate)}<br /><small className="muted">bis {fmtDate(p.endDate)}</small></td>
-                      <td className="num">{fmtEurCompact(p.budget)}</td>
+                      {seeCosts && <td className="num">{fmtEurCompact(p.budget)}</td>}
                       <td><ProgressBar value={m.progress} marker={m.plannedProgress} /><small className="muted">{fmtPct(m.progress)}</small></td>
-                      <td><BulletBar budget={p.budget || 0} actual={m.actualCost} forecast={m.eac} /><small className="muted">{fmtPct(m.budgetUsed)} verbraucht</small></td>
+                      {seeCosts && <td><BulletBar budget={p.budget || 0} actual={m.actualCost} forecast={m.eac} /><small className="muted">{fmtPct(m.budgetUsed)} verbraucht</small></td>}
                       <td><AmpelBadge value={m.overall} compact /></td>
                       <td><ProjectStatusBadge status={p.status} /></td>
                     </tr>
@@ -157,10 +159,12 @@ export function Projects() {
                   <span className="muted small">Fortschritt</span><strong>{fmtPct(m.progress)}</strong>
                 </div>
                 <ProgressBar value={m.progress} marker={m.plannedProgress} />
-                <div className="project-card-row">
-                  <span className="muted small">Kosten / Budget</span><strong>{fmtEurCompact(m.actualCost)} / {fmtEurCompact(p.budget)}</strong>
-                </div>
-                <BulletBar budget={p.budget || 0} actual={m.actualCost} forecast={m.eac} />
+                {seeCosts && <>
+                  <div className="project-card-row">
+                    <span className="muted small">Kosten / Budget</span><strong>{fmtEurCompact(m.actualCost)} / {fmtEurCompact(p.budget)}</strong>
+                  </div>
+                  <BulletBar budget={p.budget || 0} actual={m.actualCost} forecast={m.eac} />
+                </>}
                 <footer>
                   <span className="lead"><Avatar employee={lead} size={24} /> {lead?.name}</span>
                   <AmpelBadge value={m.overall} />

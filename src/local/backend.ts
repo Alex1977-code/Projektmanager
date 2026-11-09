@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { handle } from '../../server/api.js';
 import { createMemoryStore } from '../../server/memoryStore.js';
-import { seed } from '../../server/seed.js';
+import { seed, ensureDefaults } from '../../server/seed.js';
 import { SCHEMA } from '../../server/core.js';
 import { Sync, type SyncStatus } from './sync';
 
@@ -52,6 +52,8 @@ export function ready() {
     readyPromise = (async () => {
       const synced = await sync.connect();
       if (!synced) loadLocal();
+      const empty = store.allRows('employees').length === 0 && store.allRows('projects').length === 0;
+      if (!empty && ensureDefaults(store)) afterWrite();
       return { empty: store.allRows('employees').length === 0 && store.allRows('projects').length === 0, synced };
     })();
   }

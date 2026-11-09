@@ -66,6 +66,7 @@ export function ProjectForm({ project, onClose, onSaved }: { project?: Project; 
     startDate: project?.startDate ?? today,
     endDate: project?.endDate ?? addMonths(today, 12),
     budget: str(project?.budget),
+    extNo: project?.extNo ?? '',
     description: project?.description ?? '',
   });
   const [lph, setLph] = useState<number[]>([1, 2, 3, 4]);
@@ -157,6 +158,7 @@ export function ProjectForm({ project, onClose, onSaved }: { project?: Project; 
         <Field label="Projektstart"><input type="date" value={v.startDate} onChange={(e) => set('startDate', e.target.value)} required /></Field>
         <Field label="Projektende"><input type="date" value={v.endDate} onChange={(e) => set('endDate', e.target.value)} required /></Field>
         <Field label="Honorar / Budget (netto, €)"><input inputMode="decimal" value={v.budget} onChange={(e) => set('budget', e.target.value)} placeholder="0" /></Field>
+        <Field label="Abacus-Projektnummer" hint="Für den Export der Projektzeiten; leer = Projektnummer"><input value={v.extNo} onChange={(e) => set('extNo', e.target.value)} placeholder={v.number} /></Field>
         <Field label="Priorität">
           <select value={v.priority} onChange={(e) => set('priority', e.target.value as Project['priority'] & string)}>
             {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -396,6 +398,7 @@ export function EmployeeForm({ employee, onClose }: { employee?: Employee; onClo
     skills: (employee?.skills || []).join(', '), color: employee?.color ?? AVATAR_COLORS[data.employees.length % AVATAR_COLORS.length],
     active: employee?.active ?? true,
     login: employee?.login ?? '', appRole: (employee?.appRole ?? 'mitarbeiter') as Role, vacationDays: str(employee?.vacationDays ?? 30),
+    personnelNo: employee?.personnelNo ?? '',
   });
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -447,10 +450,11 @@ export function EmployeeForm({ employee, onClose }: { employee?: Employee; onClo
         <Field label="Urlaubsanspruch (Tage/Jahr)"><input inputMode="decimal" value={v.vacationDays} onChange={(e) => set('vacationDays', e.target.value)} /></Field>
         <label className="check-field"><input type="checkbox" checked={v.active} onChange={(e) => set('active', e.target.checked)} /> Aktiv (in Planung verfügbar)</label>
         <div className="field-span2 form-section">Anmeldung</div>
+        <Field label="Abacus-Personalnummer" hint="Für die Übergabe von Zeiten an Abacus"><input value={v.personnelNo} onChange={(e) => set('personnelNo', e.target.value)} placeholder="z. B. 1001" /></Field>
         <Field label="Windows-Anmeldename" hint="sAMAccountName im Active Directory, z. B. s.hartmann"><input value={v.login} onChange={(e) => set('login', e.target.value)} placeholder="vorname.nachname" autoComplete="off" /></Field>
         <Field label="Berechtigung" hint="Wird überschrieben, wenn AD-Gruppen konfiguriert sind">
           <select value={v.appRole} onChange={(e) => set('appRole', e.target.value as Role)}>
-            {(Object.keys(ROLE_LABEL) as Role[]).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+            {(data.roles.length ? data.roles.map((r) => [r.key, r.name]) : Object.entries(ROLE_LABEL)).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
           </select>
         </Field>
       </form>

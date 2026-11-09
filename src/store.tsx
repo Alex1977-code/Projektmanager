@@ -16,6 +16,8 @@ interface Store {
   session: SessionUser | null;
   authMode: 'none' | 'ldap' | 'header';
   role: Role;
+  /** Hat der angemeldete Benutzer dieses Recht? (siehe shared/permissions.js) */
+  can: (permission: string) => boolean;
   isLead: boolean;
   isAdmin: boolean;
   logout: () => Promise<void>;
@@ -215,9 +217,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  const perms = new Set(data.me?.permissions || []);
+  const can = (p: string) => perms.has(p);
   const role: Role = auth.mode === 'none' ? 'admin' : auth.user?.role || 'mitarbeiter';
   const value: Store = {
-    session: auth.user, authMode: auth.mode, role, isLead: role === 'admin' || role === 'leitung', isAdmin: role === 'admin', logout: auth.logout,
+    session: auth.user, authMode: auth.mode, role, can, isLead: can('projects.edit'), isAdmin: can('settings.edit'), logout: auth.logout,
     data, idx, me, setMeId, create, update, remove, setAllocation, createTasks, refreshSummary, reload, saveSettings };
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

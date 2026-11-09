@@ -910,6 +910,67 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
 .inv-sum .total { border-top: 2px solid var(--text); font-weight: 700; font-size: 16px; margin-top: 4px; padding-top: 8px; }
 .paid-note { display: flex; align-items: center; gap: 6px; color: var(--good); font-weight: 600; margin: 12px 0 0; }
 
+
+/* ---------------------------------------------------------- Rollen & Rechte */
+.perm-table th.perm-role { text-align: center; min-width: 110px; text-transform: none; letter-spacing: 0; }
+.perm-role span { display: block; color: var(--text); font-size: 12.5px; }
+.perm-role small { font-weight: 400; }
+.perm-group td { background: var(--surface-2); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 650; color: var(--muted); padding: 7px 14px; }
+.perm-cell { text-align: center; }
+.perm-check { display: inline-grid; place-items: center; width: 30px; height: 26px; border-radius: 6px; cursor: pointer; }
+.perm-check input { width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer; }
+.perm-check.on { background: var(--primary-soft); }
+.perm-check.locked { cursor: default; opacity: 0.75; }
+.role-card { gap: 8px; }
+.role-desc { border: 1px solid transparent; border-radius: 6px; padding: 5px 8px; font-size: 12.5px; color: var(--text-2); background: var(--surface-2); }
+.role-desc:focus { outline: 0; border-color: var(--primary); background: var(--surface); }
+
+/* ---------------------------------------------------------- Arbeitszeit */
+.stamp-card { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; box-shadow: var(--shadow-sm); }
+.stamp-card.running { border-color: #86c79b; background: linear-gradient(90deg, var(--good-bg), var(--surface) 60%); }
+.stamp-info { display: flex; flex-direction: column; flex: 1; min-width: 200px; }
+.stamp-info strong { font-size: 16px; }
+.stamp-btn { height: 46px; padding: 0 22px; font-size: 15px; min-width: 150px; }
+.stamp-card.running .stamp-btn { background: #b42318; border-color: #b42318; }
+.wt { width: 100%; border-collapse: collapse; font-size: 13px; }
+.wt th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 8px 6px; background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.wt th.num, .wt td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.wt td { padding: 3px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.wt tr.we td { background: #f6f7fa; color: var(--faint); }
+.wt tr.hol td { background: #f3f4f8; }
+.wt tr.today td { background: #f3f7ff; }
+.wt tfoot td { background: var(--surface-2); padding: 9px 6px; border-bottom: 0; }
+.wt-input { width: 64px; height: 30px; border: 1px solid var(--border); border-radius: 6px; text-align: center; font-variant-numeric: tabular-nums; background: var(--surface); }
+.wt-input:focus { outline: 0; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+.wt-input:disabled { background: transparent; border-color: transparent; color: var(--text); }
+.wt-break { width: 48px; }
+.wt-select { height: 30px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-size: 12px; max-width: 120px; }
+.wt-select:disabled { border-color: transparent; background: transparent; appearance: none; }
+.wt-hint { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 220px; }
+.wt-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.wt-check.bad { color: var(--bad); font-weight: 600; }
+.wt-check.warn { color: var(--warn); }
+.wt-check.info { color: var(--muted); }
+
+/* ---------------------------------------------------------- Abacus */
+.abacus-form { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.abacus-warn { list-style: none; margin: 0; padding: 10px 16px; background: var(--warn-bg); color: var(--warn); font-size: 12.5px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid var(--border); }
+.abacus-warn li { display: flex; gap: 6px; align-items: flex-start; }
+.abacus-table td { font-size: 12.5px; white-space: nowrap; }
+.abacus-cfg { margin-bottom: 16px; }
+.abacus-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 24px; margin-bottom: 16px; }
+.abacus-grid h4 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 6px 0 8px; }
+.map-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px; margin-bottom: 14px; }
+.map-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+.map-row input { width: 64px; height: 28px; border: 1px solid var(--border-strong); border-radius: 6px; text-align: center; }
+.col-editor { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+.col-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) auto auto auto; align-items: center; gap: 6px; font-size: 12.5px; }
+.col-row input { height: 28px; border: 1px solid var(--border-strong); border-radius: 6px; padding: 0 8px; min-width: 0; }
+.col-no { color: var(--faint); font-variant-numeric: tabular-nums; text-align: right; }
+.col-field { color: var(--text-2); }
+.abacus-sample { font-size: 12px; white-space: pre-wrap; word-break: break-all; background: var(--surface-3); padding: 6px 8px; border-radius: 6px; display: block; font-weight: 400; }
+@media (max-width: 900px) { .abacus-grid { grid-template-columns: minmax(0, 1fr); } }
+
 /* ---------------------------------------------------------- Veröffentlichte Version */
 .sync-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 12px; white-space: nowrap; }
 .sync-good { color: var(--good); background: var(--good-bg); }

@@ -1,5 +1,5 @@
 // Demodaten: Abwesenheiten (Urlaub, Krankheit, Fortbildung …) und Abschlagsrechnungen.
-import { insert } from './core.js';
+import { insert, list } from './core.js';
 import { computeInvoice } from './billing.js';
 import { holidayName } from '../shared/holidays.js';
 
@@ -116,4 +116,36 @@ export function seedInvoices(db, { projects, today, rand, authorOf }) {
       ...x.calc, status, dueDate: due, paidDate, paidAmount: paidDate ? x.calc.gross : null, note: '', createdBy: authorOf(x.project),
     });
   }
+}
+
+/** Arbeitszeiten (Kommen/Gehen) für Vormonat und laufenden Monat; Vormonat freigegeben. */
+export function seedWorktimes(db, { emps, today, rand }) {
+  const absences = list(db, 'absences').filter((a) => a.status === 'genehmigt');
+  const first = (() => { const [y, m] = today.split('-').map(Number); return iso(Date.UTC(m === 1 ? y - 1 : y, m === 1 ? 11 : m - 2, 1)); })();
+  const prevMonth = first.slice(0, 7);
+  const pad = (n) => String(n).padStart(2, '0');
+  const hm = (min) => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`;
+  emps.forEach((e, idx) => {
+    if (!e.weeklyHours) return;
+    const perDay = (e.weeklyHours / 5) * 60;
+    for (let d = first; d < today; d = addDays(d, 1)) {
+      const dow = new Date(parse(d)).getUTCDay();
+      if (dow === 0 || dow === 6 || holidayName(d, 'HB')) continue;
+      if (absences.some((a) => (a.employeeId === e.id || a.employeeId === null) && a.startDate <= d && a.endDate >= d)) continue;
+      const start = 420 + Math.floor(rand() * 8) * 15; // 07:00 – 08:45
+      let net = Math.round((perDay + (rand() - 0.45) * 90) / 5) * 5;
+      if (idx === 2 && d.endsWith('-12')) net = 650; // Beispiel: über 10 Stunden
+      let brk = net > 540 ? 45 : net > 360 ? 30 : 0;
+      if (idx === 6 && d.endsWith('-05')) brk = 15; // Beispiel: Pause zu kurz
+      insert(db, 'worktimes', {
+        employeeId: e.id, date: d, start: hm(start), end: hm(start + net + brk), breakMin: brk,
+        location: rand() < 0.2 ? 'Homeoffice' : rand() < 0.1 ? 'Baustelle' : 'Büro', note: '',
+      });
+    }
+    const status = idx % 9 === 4 ? 'eingereicht' : 'freigegeben';
+    insert(db, 'worktimeMonths', {
+      employeeId: e.id, month: prevMonth, status, submittedAt: `${addDays(today, -6)}T16:00:00.000Z`,
+      approvedBy: status === 'freigegeben' ? emps[0].id : null, approvedAt: status === 'freigegeben' ? `${addDays(today, -4)}T09:00:00.000Z` : null,
+    });
+  });
 }

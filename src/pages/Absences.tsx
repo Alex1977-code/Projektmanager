@@ -35,7 +35,8 @@ export function vacationStats(e: Employee, year: number, absences: Absence[], st
 
 // ================================================================== Dialog
 export function AbsenceDialog({ absence, defaults, onClose }: { absence?: Absence; defaults?: Partial<Absence>; onClose: () => void }) {
-  const { data, idx, me, isLead, create, update, remove } = useStore();
+  const { data, idx, me, can, create, update, remove } = useStore();
+  const isLead = can('absences.approve');
   const toast = useToast();
   const confirm = useConfirm();
   const isNew = !absence;
@@ -139,7 +140,9 @@ export function AbsenceDialog({ absence, defaults, onClose }: { absence?: Absenc
 
 // ================================================================== Seite
 export function Absences() {
-  const { data, idx, me, isLead, update } = useStore();
+  const { data, idx, me, can, update } = useStore();
+  const isLead = can('absences.approve');
+  const seeDetails = can('absences.details');
   const toast = useToast();
   const today = todayISO();
   const [month, setMonth] = useState(startOfMonth(today));
@@ -265,7 +268,7 @@ export function Absences() {
           </table>
         </div>
         <div className="rg-legend">
-          {ABSENCE_TYPES.map((t) => <span key={t}><i className={`cal-abs abs-${t}`}>{ABSENCE_LETTER[t]}</i> {t}{t === 'Sonstiges' && !isLead ? ' / abwesend' : ''}</span>)}
+          {ABSENCE_TYPES.map((t) => <span key={t}><i className={`cal-abs abs-${t}`}>{ABSENCE_LETTER[t]}</i> {t}{t === 'Sonstiges' && !seeDetails ? ' / abwesend' : ''}</span>)}
           <span><i className="cal-abs abs-Urlaub pending">U</i> beantragt</span>
           <span><i className="cal-legend-hol" /> Feiertag / Wochenende</span>
           <span className="muted">Klick auf einen freien Tag legt eine Abwesenheit an</span>
@@ -278,7 +281,7 @@ export function Absences() {
             <table className="table">
               <thead><tr><th>Mitarbeiter</th><th className="num">Anspruch</th><th className="num">Genommen</th><th className="num">Genehmigt geplant</th><th className="num">Beantragt</th><th className="num">Rest</th><th style={{ width: 220 }} /></tr></thead>
               <tbody>
-                {people.filter((e) => isLead || e.id === me?.id).map((e) => {
+                {people.filter((e) => isLead || seeDetails || e.id === me?.id).map((e) => {
                   const s = vacationStats(e, year, data.absences, state);
                   return (
                     <Fragment key={e.id}>
