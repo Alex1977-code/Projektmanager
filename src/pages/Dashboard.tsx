@@ -13,11 +13,12 @@ import type { Task } from '../types';
 import { sortTasks } from '../components/Kanban';
 import { dayOff, weekCapacity } from '../utils/capacity';
 import { StampCard, useOwnWorktimes } from '../components/StampCard';
+import { TaskStatusPicker } from '../components/StatusPicker';
 import { monthRows } from '../utils/worktimeCalc';
 import { addMonths, monthLong } from '../utils/date';
 
 export function Dashboard() {
-  const { data, idx, me, update, can } = useStore();
+  const { data, idx, me, can } = useStore();
   const seeCosts = can('costs.view');
   const navigate = useNavigate();
   const [editTask, setEditTask] = useState<Task | null>(null);
@@ -213,12 +214,11 @@ export function Dashboard() {
                 const overdue = t.dueDate && t.dueDate < today;
                 return (
                   <li key={t.id}>
-                    <button className="check" title="Als erledigt markieren" aria-label="Als erledigt markieren" onClick={() => update('tasks', t.id, { status: 'erledigt' })}><Check size={13} /></button>
                     <button className="task-list-main" onClick={() => setEditTask(t)}>
                       <strong>{t.title}</strong>
-                      <small><span className="proj-dot" style={{ background: p?.color || '#64748b' }} /> {p?.number} · <span className={overdue ? 'text-bad' : ''}>{t.dueDate ? `fällig ${relDays(t.dueDate)}` : 'ohne Termin'}</span></small>
+                      <small><span className="proj-dot" style={{ background: p?.color || '#64748b' }} /> {p?.number} · <span className={overdue ? 'text-bad' : ''}>{t.dueDate ? `fällig ${relDays(t.dueDate)}` : 'ohne Termin'}</span> <PriorityTag priority={t.priority} /></small>
                     </button>
-                    <PriorityTag priority={t.priority} />
+                    <TaskStatusPicker task={t} labels="none" />
                   </li>
                 );
               })}

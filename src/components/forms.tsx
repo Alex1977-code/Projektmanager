@@ -4,8 +4,9 @@ import { useStore } from '../store';
 import { useToast } from './Toast';
 import { Modal, useConfirm } from './Modal';
 import { Field } from './ui';
+import { StatusSteps } from './StatusPicker';
 import {
-  COST_CATEGORIES, PRIORITIES, PROJECT_STATUS, PROJECT_TYPES, TASK_STATUS, TASK_STATUS_LABEL,
+  COST_CATEGORIES, PRIORITIES, PROJECT_STATUS, PROJECT_TYPES,
   ROLE_LABEL, type CostItem, type Employee, type ID, type Milestone, type Phase, type Project, type Role, type Task,
 } from '../types';
 import { addDays, addMonths, todayISO } from '../utils/date';
@@ -269,10 +270,8 @@ export function TaskForm({ task, defaults, onClose }: { task?: Task; defaults?: 
             {activeEmployees(data.employees, base.assigneeId).map((e) => <option key={e.id} value={e.id}>{e.name} · {e.role}</option>)}
           </select>
         </Field>
-        <Field label="Status">
-          <select value={v.status} onChange={(e) => set('status', e.target.value as Task['status'])}>
-            {TASK_STATUS.map((s) => <option key={s} value={s}>{TASK_STATUS_LABEL[s]}</option>)}
-          </select>
+        <Field label="Status" span={2}>
+          <StatusSteps value={v.status} onChange={(s) => set('status', s)} labels="all" className="status-steps-wide" />
         </Field>
         <Field label="Beginn"><input type="date" value={v.startDate} onChange={(e) => set('startDate', e.target.value)} /></Field>
         <Field label="Fällig am"><input type="date" value={v.dueDate} onChange={(e) => set('dueDate', e.target.value)} /></Field>

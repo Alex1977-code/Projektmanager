@@ -4,13 +4,14 @@ import { Columns3, List, Plus, Search } from 'lucide-react';
 import { useStore } from '../store';
 import { Avatar, Card, EmptyState, PageHeader, PriorityTag, Segmented } from '../components/ui';
 import { KanbanBoard, sortTasks } from '../components/Kanban';
+import { TaskStatusPicker } from '../components/StatusPicker';
 import { TaskForm } from '../components/forms';
-import { PRIORITIES, TASK_STATUS, TASK_STATUS_LABEL, type Task, type TaskStatus } from '../types';
+import { PRIORITIES, type Task } from '../types';
 import { fmtDate, relDays, todayISO } from '../utils/date';
 import { classNames, fmtNum } from '../utils/format';
 
 export function Tasks() {
-  const { data, idx, me, update } = useStore();
+  const { data, idx, me } = useStore();
   const [params, setParams] = useSearchParams();
   const [view, setView] = useState<'board' | 'list'>('board');
   const [q, setQ] = useState('');
@@ -105,7 +106,7 @@ export function Tasks() {
               <table className="table table-hover">
                 <thead>
                   <tr>
-                    <th style={{ width: 150 }}>Status</th>
+                    <th style={{ width: 215 }}>Status</th>
                     <th>Aufgabe</th>
                     <th>Projekt / Phase</th>
                     <th>Zuständig</th>
@@ -123,9 +124,7 @@ export function Tasks() {
                     return (
                       <tr key={t.id} className={classNames('clickable', t.status === 'erledigt' && 'row-done')} onClick={() => setEdit(t)}>
                         <td onClick={(e) => e.stopPropagation()}>
-                          <select className={`status-select status-${t.status}`} value={t.status} onChange={(e) => update('tasks', t.id, { status: e.target.value as TaskStatus })} aria-label="Status">
-                            {TASK_STATUS.map((s) => <option key={s} value={s}>{TASK_STATUS_LABEL[s]}</option>)}
-                          </select>
+                          <TaskStatusPicker task={t} />
                         </td>
                         <td><strong>{t.title}</strong></td>
                         <td><span className="proj-cell-inline"><span className="proj-dot" style={{ background: p?.color || '#64748b' }} />{p?.number}{ph && <span className="muted"> · {ph.code}</span>}</span></td>

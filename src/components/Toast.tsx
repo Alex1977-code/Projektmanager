@@ -2,9 +2,11 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 
 type Kind = 'success' | 'error' | 'info';
-interface ToastItem { id: number; kind: Kind; message: string }
+interface ToastAction { label: string; onClick: () => void }
+interface ToastItem { id: number; kind: Kind; message: string; action?: ToastAction }
 interface ToastApi {
-  success: (m: string) => void;
+  /** optional mit Schaltfläche, z. B. „Rückgängig“ */
+  success: (m: string, action?: ToastAction) => void;
   error: (m: string) => void;
   info: (m: string) => void;
 }
@@ -15,13 +17,13 @@ let counter = 0;
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const dismiss = useCallback((id: number) => setItems((l) => l.filter((t) => t.id !== id)), []);
-  const push = useCallback((kind: Kind, message: string) => {
+  const push = useCallback((kind: Kind, message: string, action?: ToastAction) => {
     const id = ++counter;
-    setItems((l) => [...l.slice(-3), { id, kind, message }]);
-    setTimeout(() => dismiss(id), kind === 'error' ? 6000 : 3200);
+    setItems((l) => [...l.slice(-3), { id, kind, message, action }]);
+    setTimeout(() => dismiss(id), kind === 'error' ? 6000 : action ? 5500 : 3200);
   }, [dismiss]);
   const api = useMemo<ToastApi>(() => ({
-    success: (m) => push('success', m),
+    success: (m, action) => push('success', m, action),
     error: (m) => push('error', m),
     info: (m) => push('info', m),
   }), [push]);
@@ -34,6 +36,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div key={t.id} className={`toast toast-${t.kind}`}>
             {t.kind === 'success' ? <CheckCircle2 size={18} /> : t.kind === 'error' ? <AlertTriangle size={18} /> : <Info size={18} />}
             <span>{t.message}</span>
+            {t.action && <button className="toast-action" onClick={() => { t.action!.onClick(); dismiss(t.id); }}>{t.action.label}</button>}
             <button className="icon-btn" onClick={() => dismiss(t.id)} aria-label="Schließen"><X size={14} /></button>
           </div>
         ))}

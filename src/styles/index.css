@@ -1176,3 +1176,35 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   .wt tfoot td.wt-sumlabel { grid-column: auto; }
   .preview-bar { padding: 8px 14px; }
 }
+
+/* ---------------------------------------------------------- Aufgabenstatus mit einem Klick */
+.status-steps { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); max-width: 100%; vertical-align: middle; }
+.status-step { --c: #64748b; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 26px; min-width: 30px; padding: 0 7px; border: 0; border-radius: 999px; background: transparent; color: #94a3b8; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; transition: background 0.12s, color 0.12s, transform 0.12s; }
+.status-step.s-in_arbeit { --c: #1d4ed8; }
+.status-step.s-pruefung { --c: #b45309; }
+.status-step.s-erledigt { --c: #15803d; }
+.status-step:not(.active):hover { background: var(--surface); color: var(--c); box-shadow: 0 0 0 1px var(--c) inset; }
+.status-step:not(.active):active { transform: scale(0.92); }
+.status-step:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.status-step.active { background: var(--c); color: #fff; cursor: default; padding: 0 10px 0 8px; }
+.status-steps.labels-none .status-step.active { padding: 0 7px; }
+.status-steps.readonly { background: transparent; border-color: transparent; padding: 0; }
+.status-steps.readonly .status-step { opacity: 1; }
+.status-steps-wide { display: flex; width: 100%; border-radius: 10px; padding: 3px; gap: 3px; }
+.status-steps-wide .status-step { flex: 1; height: 34px; border-radius: 8px; font-size: 13px; color: var(--text-2); }
+.status-steps-wide .status-step.active { color: #fff; }
+.task-card-status { margin-top: 9px; }
+.kanban-erledigt .task-card-status .status-step:not(.active) { color: #b6c0cf; }
+.task-list li .status-steps { flex: none; }
+.task-list-main small .prio { margin-left: 4px; }
+.toast-action { background: rgba(255, 255, 255, 0.14); color: #fff; border: 0; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.toast-action:hover { background: rgba(255, 255, 255, 0.26); }
+/* Finger statt Maus: größere Trefferflächen */
+@media (pointer: coarse) {
+  .status-step { height: 34px; min-width: 38px; }
+  .status-steps-wide .status-step { height: 40px; }
+}
+@media (max-width: 560px) {
+  .status-steps-wide .status-step span { font-size: 11.5px; }
+  .status-steps-wide .status-step { padding: 0 4px; gap: 4px; }
+}

@@ -6,6 +6,7 @@ import { Avatar, PriorityTag } from './ui';
 import { addDays, fmtDateShort, relDays, todayISO } from '../utils/date';
 import { classNames, fmtNum } from '../utils/format';
 import { useToast } from './Toast';
+import { TaskStatusPicker } from './StatusPicker';
 
 const PRIO_ORDER = { hoch: 0, mittel: 1, niedrig: 2 } as const;
 
@@ -128,12 +129,13 @@ export function KanbanBoard({ tasks, onOpen, onCreate, showProject = true }: { t
                       <span className="spacer" />
                       <Avatar employee={assignee} size={24} />
                     </div>
+                    <TaskStatusPicker task={t} className="task-card-status" />
                   </article>
                 </div>
               );
             })}
             {over?.status === col.status && over.index >= col.items.length && <div className="kanban-drop-indicator" />}
-            {col.items.length === 0 && <div className="kanban-empty">Aufgaben hierher ziehen</div>}
+            {col.items.length === 0 && <div className="kanban-empty">Keine Aufgaben – Status an einer Karte anklicken oder Karte hierher ziehen</div>}
           </div>
         </div>
       ))}
