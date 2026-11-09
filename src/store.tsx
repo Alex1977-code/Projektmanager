@@ -4,6 +4,7 @@ import type { Allocation, Collection, Data, Employee, EntityOf, ID, Settings, Su
 import { buildIndex, type Index } from './utils/metrics';
 import { useToast } from './components/Toast';
 import { useAuth } from './auth';
+import { CLIENT_ID, IS_HOSTED } from './hosted';
 import type { Role, SessionUser } from './types';
 
 interface Store {
@@ -62,6 +63,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     reload();
+  }, [reload]);
+
+  // Live-Synchronisation: Änderungen anderer Geräte/Personen nachladen
+  useEffect(() => {
+    let timer: number | undefined;
+    const later = () => { window.clearTimeout(timer); timer = window.setTimeout(() => reload(), 300); };
+    if (IS_HOSTED) {
+      window.addEventListener('pm:data-changed', later);
+      return () => { window.removeEventListener('pm:data-changed', later); window.clearTimeout(timer); };
+    }
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource('/api/events');
+      es.onmessage = (ev) => {
+        try { if (JSON.parse(ev.data).by !== CLIENT_ID) later(); } catch { /* Herzschlag */ }
+      };
+    } catch { /* ohne Live-Kanal */ }
+    const onVisible = () => { if (document.visibilityState === 'visible') later(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { es?.close(); document.removeEventListener('visibilitychange', onVisible); window.clearTimeout(timer); };
   }, [reload]);
 
   const refreshSummary = useCallback(async () => {

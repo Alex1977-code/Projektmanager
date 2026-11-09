@@ -4,3 +4,5 @@ export class ApiError extends Error {
     this.status = status;
   }
 }
+
+export const ANONYMOUS_ADMIN = Object.freeze({ employeeId: null, role: 'admin', name: 'Ohne Anmeldung', username: '', anonymous: true });

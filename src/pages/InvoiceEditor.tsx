@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Banknote, CheckCircle2, Loader2, Plus, Printer, Send, Trash2, Undo2, X } from 'lucide-react';
 import { useStore } from '../store';
+import { printOrSave, PRINT_LABEL } from '../utils/files';
 import { useToast } from '../components/Toast';
 import { Modal, useConfirm } from '../components/Modal';
 import { Card, EmptyState, Field } from '../components/ui';
@@ -130,7 +131,7 @@ export function InvoiceEditor() {
           </div>
           <div className="page-actions">
             {editable && <button className="icon-btn" onClick={del} title="Entwurf löschen" aria-label="Entwurf löschen"><Trash2 size={17} /></button>}
-            <button className="btn" onClick={() => { save(); window.print(); }}><Printer size={16} /> Drucken / PDF</button>
+            <button className="btn" onClick={() => { save(); printOrSave('.invoice-print', `Rechnung-${draft.invoiceNo || 'Entwurf'}`, `${title} ${draft.invoiceNo || ''}`).catch((e) => toast.error((e as Error).message)); }}><Printer size={16} /> {PRINT_LABEL}</button>
             {editable && <button className="btn btn-primary" onClick={issue}><Send size={16} /> Rechnung stellen</button>}
             {draft.status === 'gestellt' && <button className="btn" onClick={cancel}><Undo2 size={16} /> Stornieren</button>}
             {draft.status === 'gestellt' && <button className="btn btn-primary" onClick={() => setPayment(true)}><Banknote size={16} /> Zahlungseingang</button>}

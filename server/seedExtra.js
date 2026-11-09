@@ -1,5 +1,5 @@
 // Demodaten: Abwesenheiten (Urlaub, Krankheit, Fortbildung …) und Abschlagsrechnungen.
-import { insert } from './db.js';
+import { insert } from './core.js';
 import { computeInvoice } from './billing.js';
 import { holidayName } from '../shared/holidays.js';
 

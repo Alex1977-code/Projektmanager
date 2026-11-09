@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, ListPlus, Loader2, Mail, Plus, Printer, Trash2, UserPlus, X } from 'lucide-react';
 import { useStore } from '../store';
+import { printOrSave, PRINT_LABEL } from '../utils/files';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/Modal';
 import { Avatar, Card, EmptyState, Field, Segmented, TaskStatusBadge } from '../components/ui';
@@ -200,7 +201,7 @@ export function ProtocolEditor() {
           <div className="page-actions">
             <Segmented value={draft.status} onChange={(v) => change({ status: v })} options={[{ value: 'entwurf', label: 'Entwurf' }, { value: 'versendet', label: 'Versendet' }]} />
             <button className="btn" onClick={mailto} title="E-Mail an interne Teilnehmer vorbereiten"><Mail size={16} /> Verteilen</button>
-            <button className="btn" onClick={() => { save(); window.print(); }}><Printer size={16} /> Drucken / PDF</button>
+            <button className="btn" onClick={() => { save(); printOrSave('.protocol-print', `Protokoll-${project?.number}-Nr${draft.number}`, `Protokoll Nr. ${draft.number} – ${project?.number}`).catch((e) => toast.error((e as Error).message)); }}><Printer size={16} /> {PRINT_LABEL}</button>
             <button className="icon-btn" onClick={del} title="Protokoll löschen" aria-label="Protokoll löschen"><Trash2 size={17} /></button>
           </div>
         </div>

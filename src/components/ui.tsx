@@ -108,7 +108,7 @@ export function Card({ title, actions, children, className, padded = true, subti
           {actions && <div className="card-actions">{actions}</div>}
         </header>
       )}
-      <div className={padded ? 'card-body' : ''}>{children}</div>
+      <div className={padded ? 'card-body' : 'card-flush'}>{children}</div>
     </section>
   );
 }

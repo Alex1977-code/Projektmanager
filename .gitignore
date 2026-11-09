@@ -8,3 +8,5 @@ data/
 *.log
 shots/
 *.tsbuildinfo
+dist-artifact/
+artifact/

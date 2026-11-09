@@ -27,6 +27,27 @@ ohne Installation an den Arbeitsplätzen.
 Weitere Komfortfunktionen: Schnellsuche mit <kbd>Strg</kbd>+<kbd>K</kbd>, Schnellanlage von Aufgaben/Projekten,
 Benutzerwahl („Angemeldet als“), JSON-Komplettexport, responsives Layout für Tablet und Smartphone, Druckansicht.
 
+## Auf PC und Handy – immer synchron
+
+Es gibt zwei Betriebsarten mit identischem Funktionsumfang der Projektsteuerung:
+
+| | Veröffentlichte Version (claude.ai) | Eigener Server im Büro |
+|---|---|---|
+| Aufruf | Link auf claude.ai, im Browser oder in der Claude-App | `http://<server>:3001` im Firmennetz (unterwegs per VPN) |
+| Daten | gemeinsame Datenbank der Seite auf claude.ai | SQLite-Datei auf dem eigenen Server |
+| Zugriff | über „Teilen“ auf claude.ai (Mitwirkende ändern, Betrachter lesen) | Active Directory / Windows-Anmeldung, Rollen |
+| Synchronisation | live (Änderungen erscheinen in ca. 1 s auf allen Geräten) | live über Server-Sent Events, beim Zurückkehren in die App zusätzlich Abgleich |
+| Ausdrucke | Protokolle/Rechnungen als HTML-Datei speichern, dann drucken | direkt drucken / PDF |
+
+Auf dem Handy lässt sich die Server-Version über „Zum Startbildschirm hinzufügen“ wie eine App installieren
+(Web-App-Manifest mit Symbol). Alle Seiten sind für Handybreite ausgelegt.
+
+Die veröffentlichte Version entsteht mit `npm run build:artifact` als eine einzige Datei
+(`artifact/projektsteuerung.html`). Sie nutzt dieselbe Geschäftslogik wie der Server (`server/api.js`)
+mit einem Speicher im Browser (`server/memoryStore.js`) und gleicht Änderungen über `src/local/sync.ts` ab.
+Zeitbuchungen und Wochenplanung werden je Person und Quartal gebündelt, damit die Datenbank auch nach
+Jahren unter der Grenze von 25.000 Dokumenten bleibt.
+
 ## Installation
 
 Voraussetzung: **Node.js ab Version 22.5** (nutzt das integrierte SQLite – keine Datenbankinstallation nötig).
@@ -113,7 +134,9 @@ den Einstellungen einen JSON-Export herunterladen.
 
 ```
 server/            Node.js-HTTP-Server ohne Framework-Abhängigkeiten
-  db.js            Schema, Migration, CRUD (node:sqlite)
+  core.js          Schema und Datenzugriff (ohne Node-Abhängigkeiten, auch im Browser)
+  db.js            SQLite-Speicher (node:sqlite), Migration
+  memoryStore.js   Speicher im Browser mit Änderungsprotokoll (veröffentlichte Version)
   api.js           REST-API, Validierung, Kaskadenlöschung, Auswertungen
   seed.js          realistische Demodaten (relativ zum aktuellen Datum)
   seedProtocols.js Beispielprotokolle
@@ -121,9 +144,10 @@ server/            Node.js-HTTP-Server ohne Framework-Abhängigkeiten
   auth.js          Anmeldung (Active Directory, Windows-SSO), Sitzungen
   billing.js       Abschlagsrechnungen nach § 15 HOAI, Abwesenheiten, Rechte
 shared/holidays.js Gesetzliche Feiertage je Bundesland (Server und Oberfläche)
-  api.test.js      Tests (node:test)
+  api.test.js      Tests (node:test) – laufen gegen SQLite und den Browser-Speicher
 src/               React 19 + TypeScript (Vite)
-  store.tsx        zentraler Datenzustand mit optimistischen Updates
+  store.tsx        zentraler Datenzustand mit optimistischen Updates und Live-Aktualisierung
+  local/           Browser-Backend und Synchronisation der veröffentlichten Version
   utils/metrics.ts Projektkennzahlen (Earned Value, Ampeln)
   utils/taskTemplates.ts  Aufgabenkataloge HOAI / Werkstattplanung / Bauwerksprüfung
   utils/protocols.ts      Nummerierung, offene Punkte, Übernahme in Folgeprotokolle

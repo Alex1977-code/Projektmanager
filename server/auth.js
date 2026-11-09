@@ -35,7 +35,7 @@ export class AuthError extends Error {
 }
 
 export const ROLES = ['admin', 'leitung', 'mitarbeiter'];
-export const ANONYMOUS_ADMIN = Object.freeze({ employeeId: null, role: 'admin', name: 'Ohne Anmeldung', username: '', anonymous: true });
+export { ANONYMOUS_ADMIN } from './errors.js';
 
 // ------------------------------------------------------------------ Sitzungen
 const COOKIE = 'pm_session';
@@ -44,21 +44,21 @@ const hash = (t) => crypto.createHash('sha256').update(t).digest('hex');
 export function createSession(db, user, hours = config().sessionHours) {
   const token = crypto.randomBytes(32).toString('hex');
   const now = new Date();
-  db.prepare('INSERT INTO sessions (tokenHash, employeeId, role, username, name, createdAt, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+  db.raw.prepare('INSERT INTO sessions (tokenHash, employeeId, role, username, name, createdAt, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(hash(token), user.employeeId ?? null, user.role, user.username, user.name, now.toISOString(), new Date(now.getTime() + hours * 3600e3).toISOString());
-  db.prepare('DELETE FROM sessions WHERE expiresAt < ?').run(now.toISOString());
+  db.raw.prepare('DELETE FROM sessions WHERE expiresAt < ?').run(now.toISOString());
   return token;
 }
 
 export function getSession(db, token) {
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
-  const row = db.prepare('SELECT * FROM sessions WHERE tokenHash = ?').get(hash(token));
+  const row = db.raw.prepare('SELECT * FROM sessions WHERE tokenHash = ?').get(hash(token));
   if (!row || row.expiresAt < new Date().toISOString()) return null;
   return { employeeId: row.employeeId, role: row.role, username: row.username, name: row.name };
 }
 
 export function deleteSession(db, token) {
-  if (token) db.prepare('DELETE FROM sessions WHERE tokenHash = ?').run(hash(token));
+  if (token) db.raw.prepare('DELETE FROM sessions WHERE tokenHash = ?').run(hash(token));
 }
 
 export function parseCookies(header = '') {
@@ -114,11 +114,11 @@ const groupMatches = (groups, wanted) => {
  */
 export function mapUser(db, { username, email, name, groups = [] }, cfg = config()) {
   const login = normalizeUsername(username);
-  const emp = db.prepare(`SELECT id, name, appRole, active FROM employees
-    WHERE lower(login) = ? OR (? <> '' AND lower(email) = ?) ORDER BY (lower(login) = ?) DESC LIMIT 1`)
-    .get(login, (email || '').toLowerCase(), (email || '').toLowerCase(), login);
+  const mail = (email || '').toLowerCase();
+  const all = db.list('employees');
+  const emp = all.find((e) => (e.login || '').toLowerCase() === login) || (mail ? all.find((e) => (e.email || '').toLowerCase() === mail) : undefined);
   if (!emp) throw new AuthError(403, `Für „${login}“ ist kein Mitarbeiterprofil hinterlegt. Bitte wenden Sie sich an die Administration.`);
-  if (emp.active === 0) throw new AuthError(403, 'Dieses Mitarbeiterprofil ist deaktiviert.');
+  if (!emp.active) throw new AuthError(403, 'Dieses Mitarbeiterprofil ist deaktiviert.');
   let role = ROLES.includes(emp.appRole) ? emp.appRole : 'mitarbeiter';
   if (cfg.ldapGroupAdmin || cfg.ldapGroupLeitung) {
     role = groupMatches(groups, cfg.ldapGroupAdmin) ? 'admin' : groupMatches(groups, cfg.ldapGroupLeitung) ? 'leitung' : role === 'admin' ? 'mitarbeiter' : role;

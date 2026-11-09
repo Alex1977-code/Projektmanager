@@ -7,6 +7,10 @@ import {
 import { useStore } from '../store';
 import { Avatar } from './ui';
 import { ROLE_LABEL } from '../types';
+import { lazy, Suspense } from 'react';
+import { IS_HOSTED } from '../hosted';
+
+const SyncChip = IS_HOSTED ? lazy(() => import('../local/HostedGate').then((m) => ({ default: m.SyncChip }))) : null;
 import { TaskForm, ProjectForm } from './forms';
 import { classNames } from '../utils/format';
 import { todayISO } from '../utils/date';
@@ -65,7 +69,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
         <nav className="nav">
           {NAV.filter((n) => !('lead' in n) || isLead).map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
+            <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setNavOpen(false)} className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
               <n.icon size={18} />
               <span>{n.label}</span>
               {n.to === '/abwesenheiten' && isLead && pendingAbs > 0 && (
@@ -78,7 +82,7 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="nav-bottom">
-          {isAdmin && <NavLink to="/einstellungen" className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
+          {isAdmin && <NavLink to="/einstellungen" onClick={() => setNavOpen(false)} className={({ isActive }) => classNames('nav-item', isActive && 'active')}>
             <Settings size={18} /><span>Einstellungen</span>
           </NavLink>}
         </div>
@@ -94,6 +98,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <kbd>Strg K</kbd>
           </button>
           <div className="topbar-actions">
+            {SyncChip && <Suspense fallback={null}><SyncChip /></Suspense>}
             <div className="quick-add">
               <button className="btn btn-primary btn-sm" onClick={() => setQuick('task')}><Plus size={16} /> Aufgabe</button>
               {isLead && <button className="btn btn-sm" onClick={() => setQuick('project')}><Plus size={16} /> Projekt</button>}

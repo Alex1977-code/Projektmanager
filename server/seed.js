@@ -1,9 +1,7 @@
 // Demodaten für ein Ingenieurbüro (Stahlwasserbau & bewegliche Brücken, 25 Mitarbeitende).
 // Alle Termine werden relativ zum aktuellen Datum erzeugt, damit die Demo immer "lebt".
 // Alle Namen von Personen, Auftraggebern und Bauwerken sind frei erfunden.
-import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { openDb, insert, transaction, setSettings, DB_FILE } from './db.js';
+import { insert, list, transaction, setSettings } from './core.js';
 import { seedProtocols } from './seedProtocols.js';
 import { availability, buildAbsences, seedInvoices } from './seedExtra.js';
 
@@ -390,19 +388,8 @@ export function seed(db, todayIso = new Date().toISOString().slice(0, 10)) {
 }
 
 export function seedIfEmpty(db) {
-  const n = db.prepare('SELECT COUNT(*) AS n FROM employees').get().n;
-  if (n === 0) {
+  if (list(db, 'employees').length === 0) {
     seed(db);
     console.log('Demodaten wurden angelegt.');
   }
-}
-
-// CLI: node server/seed.js --reset
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  if (process.argv.includes('--reset')) {
-    for (const f of [DB_FILE, DB_FILE + '-wal', DB_FILE + '-shm']) if (fs.existsSync(f)) fs.rmSync(f);
-  }
-  const db = openDb();
-  seedIfEmpty(db);
-  db.close();
 }

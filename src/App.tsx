@@ -1,4 +1,6 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense, type ReactNode } from 'react';
+import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { IS_HOSTED } from './hosted';
 import { ToastProvider } from './components/Toast';
 import { ConfirmProvider } from './components/Modal';
 import { StoreProvider } from './store';
@@ -20,13 +22,24 @@ import { Absences } from './pages/Absences';
 import { Invoices } from './pages/Invoices';
 import { InvoiceEditor } from './pages/InvoiceEditor';
 
+// Veröffentlichte Version: Browser-Backend mit gemeinsamer Datenbank (nur dort geladen)
+const HostedGate = IS_HOSTED ? lazy(() => import('./local/HostedGate').then((m) => ({ default: m.HostedGate }))) : null;
+// In der veröffentlichten Version gibt es keine URL-Pfade – Navigation im Speicher
+const Router = IS_HOSTED ? MemoryRouter : BrowserRouter;
+
+function Gate({ children }: { children: ReactNode }) {
+  if (!HostedGate) return <>{children}</>;
+  return <Suspense fallback={<div className="boot-screen"><div className="spinner" /></div>}><HostedGate>{children}</HostedGate></Suspense>;
+}
+
 export function App() {
   return (
     <ToastProvider>
       <ConfirmProvider>
+        <Gate>
         <AuthProvider>
         <StoreProvider>
-          <BrowserRouter>
+          <Router>
             <Layout>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
@@ -47,9 +60,10 @@ export function App() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>
-          </BrowserRouter>
+          </Router>
         </StoreProvider>
         </AuthProvider>
+        </Gate>
       </ConfirmProvider>
     </ToastProvider>
   );

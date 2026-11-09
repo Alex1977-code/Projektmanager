@@ -1,10 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from './db.js';
+import { createMemoryStore } from './memoryStore.js';
 import { handle, ApiError } from './api.js';
 import { seed } from './seed.js';
 
+// Dieselben Tests laufen gegen SQLite (Server) und den In-Memory-Speicher (Browser), siehe api.memory.test.js
+const STORE = process.env.PM_TEST_STORE || 'sqlite';
 function fresh() {
+  // wie im Browser: zeitlich aufsteigende, geräteübergreifend eindeutige IDs
+  let n = 0;
+  if (STORE === 'memory') return createMemoryStore({ idFactory: () => 1.7e12 * 1000 + (++n) * 1000 + Math.floor(Math.random() * 1000) });
   return openDb(':memory:');
 }
 
@@ -38,7 +44,7 @@ test('Projekt löschen entfernt abhängige Daten', () => {
   handle(db, 'POST', '/api/timeEntries/set', {}, { employeeId: e.id, projectId: p.id, phaseId: ph.id, date: '2026-01-05', hours: 4 });
   handle(db, 'DELETE', `/api/projects/${p.id}`, {});
   for (const t of ['phases', 'tasks', 'timeEntries']) {
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n, 0, t);
+    assert.equal(db.list(t).length, 0, t);
   }
 });
 
@@ -204,13 +210,15 @@ test('Anmeldung: Benutzernamen, Zuordnung, AD-Gruppen, Notfall-Admin, Sitzungen'
   assert.equal(auth.checkAdminPassword('admin', 'falsch', { adminPassword: 'geheim' }), false);
   assert.equal(auth.checkAdminPassword('admin', '', { adminPassword: '' }), false);
 
-  const token = auth.createSession(db, { employeeId: 1, role: 'leitung', username: 's.hartmann', name: 'S' }, 1);
-  assert.equal(auth.getSession(db, token).username, 's.hartmann');
-  assert.equal(auth.getSession(db, 'x'.repeat(64)), null);
-  auth.deleteSession(db, token);
-  assert.equal(auth.getSession(db, token), null);
-  const expired = auth.createSession(db, { employeeId: 1, role: 'leitung', username: 's', name: 'S' }, -1);
-  assert.equal(auth.getSession(db, expired), null, 'abgelaufene Sitzung');
+  if (db.raw) {
+    const token = auth.createSession(db, { employeeId: 1, role: 'leitung', username: 's.hartmann', name: 'S' }, 1);
+    assert.equal(auth.getSession(db, token).username, 's.hartmann');
+    assert.equal(auth.getSession(db, 'x'.repeat(64)), null);
+    auth.deleteSession(db, token);
+    assert.equal(auth.getSession(db, token), null);
+    const expired = auth.createSession(db, { employeeId: 1, role: 'leitung', username: 's', name: 'S' }, -1);
+    assert.equal(auth.getSession(db, expired), null, 'abgelaufene Sitzung');
+  }
 });
 
 test('Active Directory: Bind als benutzer@domain, falsches Kennwort, Dienstkonto-Suche', async () => {

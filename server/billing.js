@@ -1,5 +1,5 @@
 // Abschlags- und Schlussrechnungen nach HOAI (§ 15) sowie Abwesenheiten.
-import { list, get, insert, update, remove, transaction, getSettings } from './db.js';
+import { list, get, insert, update, remove, transaction, getSettings } from './core.js';
 import { ApiError } from './errors.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -32,8 +32,7 @@ export function computeInvoice(inv, previousNet) {
 }
 
 function previousNetOf(db, projectId, number) {
-  return db.prepare("SELECT COALESCE(SUM(net), 0) AS s FROM invoices WHERE projectId = ? AND number < ? AND status <> 'storniert'")
-    .get(projectId, number).s;
+  return list(db, 'invoices', { projectId }).filter((i) => i.number < number && i.status !== 'storniert').reduce((s, i) => s + (i.net || 0), 0);
 }
 
 /** Entwürfe neu berechnen (gestellte Rechnungen bleiben unverändert). */
@@ -44,7 +43,7 @@ function recalcDrafts(db, projectId) {
 
 function nextInvoiceNo(db, date) {
   const year = (date || new Date().toISOString()).slice(0, 4);
-  const rows = db.prepare('SELECT invoiceNo FROM invoices WHERE invoiceNo LIKE ?').all(`RE-${year}-%`);
+  const rows = list(db, 'invoices').filter((i) => String(i.invoiceNo || '').startsWith(`RE-${year}-`));
   const max = rows.reduce((m, r) => Math.max(m, Number(String(r.invoiceNo).split('-')[2]) || 0), 0);
   return `RE-${year}-${String(max + 1).padStart(3, '0')}`;
 }
@@ -62,7 +61,7 @@ export function handleInvoices(db, method, id, body, user, validate) {
       const projectId = Number(body.projectId);
       if (!get(db, 'projects', projectId)) throw new ApiError(400, 'Projekt nicht gefunden');
       const settings = getSettings(db);
-      const number = (db.prepare('SELECT MAX(number) AS n FROM invoices WHERE projectId = ?').get(projectId).n || 0) + 1;
+      const number = Math.max(0, ...list(db, 'invoices', { projectId }).map((i) => i.number || 0)) + 1;
       const base = {
         projectId, number, type: body.type || 'Abschlagsrechnung', date: body.date, periodEnd: body.periodEnd || body.date,
         lines: body.lines || [], nkPct: body.nkPct ?? settings.nkPct, vatPct: body.vatPct ?? settings.vatPct,

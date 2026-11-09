@@ -1,6 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Database, Download, Info, ShieldCheck } from 'lucide-react';
 import { useStore } from '../store';
+import { useToast } from '../components/Toast';
+import { api } from '../api';
+import { IS_HOSTED } from '../hosted';
+import { useConfirm } from '../components/Modal';
+import { saveFile } from '../utils/files';
 import { Card, EmptyState, Field, PageHeader } from '../components/ui';
 import { fmtNum } from '../utils/format';
 import { STATES } from '../../shared/holidays.js';
@@ -14,6 +19,7 @@ const MODE_TEXT: Record<string, string> = {
 
 export function Settings() {
   const { data, saveSettings, isAdmin, authMode, session } = useStore();
+  const toast = useToast();
   const [s, setS] = useState<SettingsT>({ ...data.settings });
   const set = <K extends keyof SettingsT>(k: K, v: SettingsT[K]) => setS((x) => ({ ...x, [k]: v }));
   const numOf = (v: unknown, d: number) => (Number(String(v).replace(',', '.')) || d);
@@ -21,6 +27,14 @@ export function Settings() {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     saveSettings({ ...s, hoursPerDay: numOf(s.hoursPerDay, 8), nkPct: numOf(s.nkPct, 0), vatPct: numOf(s.vatPct, 19), paymentDays: numOf(s.paymentDays, 30) });
+  };
+  const exportAll = async () => {
+    try {
+      const data = await api.get('/api/export');
+      await saveFile(`projektmanager-export-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data, null, 1), 'application/json');
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
   if (!isAdmin) return <div className="page"><EmptyState title="Kein Zugriff" text="Die Einstellungen sind der Administration vorbehalten." /></div>;
 
@@ -54,7 +68,9 @@ export function Settings() {
           </form>
         </Card>
 
-        <Card title="Anmeldung und Berechtigungen">
+        {IS_HOSTED && <HostedDataCard />}
+
+        {!IS_HOSTED && <Card title="Anmeldung und Berechtigungen">
           <div className="settings-row">
             <ShieldCheck size={20} className="muted" />
             <div className="grow">
@@ -66,7 +82,7 @@ export function Settings() {
               </p>
             </div>
           </div>
-        </Card>
+        </Card>}
 
         <Card title="Datensicherung" subtitle="Vollständiger Export aller Daten als JSON (inkl. Zeitbuchungen)">
           <div className="settings-row">
@@ -77,7 +93,7 @@ export function Settings() {
               </div>
               <p className="muted small">Die Datenbank liegt serverseitig in <code>data/projektmanager.db</code> (SQLite). Für eine Sicherung genügt es, diese Datei regelmäßig zu kopieren.</p>
             </div>
-            <a className="btn" href="/api/export" download><Download size={16} /> Export herunterladen</a>
+            <button className="btn" onClick={exportAll}><Download size={16} /> Export herunterladen</button>
           </div>
         </Card>
 
@@ -92,5 +108,39 @@ export function Settings() {
         </Card>
       </div>
     </div>
+  );
+}
+
+/** Veröffentlichte Version: gemeinsame Daten, Zurücksetzen. */
+function HostedDataCard() {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { reload } = useStore();
+  const reset = async () => {
+    const ok = await confirm({
+      title: 'Alle Daten löschen?',
+      message: <>Alle Projekte, Aufgaben, Zeiten, Protokolle, Rechnungen und Mitarbeiterdaten werden <strong>auf allen Geräten und für alle Personen</strong> endgültig gelöscht.</>,
+      confirmLabel: 'Alles löschen', danger: true,
+    });
+    if (!ok) return;
+    const { resetAll } = await import('../local/backend');
+    await resetAll();
+    toast.success('Alle Daten wurden gelöscht');
+    await reload();
+  };
+  return (
+    <Card title="Gemeinsame Daten" subtitle="Veröffentlichte Version auf claude.ai">
+      <div className="settings-row">
+        <ShieldCheck size={20} className="muted" />
+        <div className="grow">
+          <p style={{ margin: '0 0 6px' }}>Alle Daten werden in der gemeinsamen Datenbank dieser Seite gespeichert und sind auf jedem Gerät (PC, Tablet, Handy) sofort aktuell.</p>
+          <p className="muted small" style={{ margin: 0 }}>
+            Wer die Seite öffnen darf, legen Sie über „Teilen“ auf claude.ai fest: Mitwirkende können Daten ändern, Betrachter nur lesen.
+            Die Rollen dieser Software (Administration, Projektleitung, Mitarbeiter) gelten hier nicht – dafür ist die Version auf dem eigenen Server mit Active-Directory-Anmeldung gedacht.
+          </p>
+        </div>
+        <button className="btn btn-ghost-danger" onClick={reset}>Alle Daten löschen</button>
+      </div>
+    </Card>
   );
 }

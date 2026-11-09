@@ -1,3 +1,5 @@
+import { CLIENT_ID, IS_HOSTED } from './hosted';
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -7,11 +9,20 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  if (IS_HOSTED) {
+    const { localRequest } = await import('./local/backend');
+    try {
+      return (await localRequest(method, url, body)) as T;
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      throw new ApiError(err.status || 500, err.message);
+    }
+  }
   let res: Response;
   try {
     res = await fetch(url, {
       method,
-      headers: { 'X-Requested-With': 'projektmanager', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+      headers: { 'X-Requested-With': 'projektmanager', 'X-Client-Id': CLIENT_ID, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
       credentials: 'same-origin',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });

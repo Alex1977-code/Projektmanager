@@ -1,5 +1,5 @@
 // Beispiel-Besprechungsprotokolle für die Demodaten. Alle Personen und Firmen sind frei erfunden.
-import { insert } from './db.js';
+import { insert } from './core.js';
 
 const DAY = 86400000;
 const iso = (ms) => new Date(ms).toISOString().slice(0, 10);

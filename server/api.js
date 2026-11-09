@@ -1,12 +1,11 @@
 // REST-API – unabhängig vom HTTP-Server testbar.
 import {
   SCHEMA, REQUIRED, isTable, list, get, insert, update, remove, transaction,
-  getSettings, setSettings,
-} from './db.js';
+  getSettings, setSettings, removeWhere, updateWhere,
+} from './core.js';
 
-import { ApiError } from './errors.js';
+import { ApiError, ANONYMOUS_ADMIN } from './errors.js';
 import { handleAbsences, handleInvoices, isLead, maskAbsences } from './billing.js';
-import { ANONYMOUS_ADMIN } from './auth.js';
 
 export { ApiError };
 
@@ -14,18 +13,24 @@ const BOOTSTRAP_TABLES = ['employees', 'projects', 'phases', 'milestones', 'task
 
 /** Ist-Stunden und Ist-Personalkosten (Stunden × Verrechnungssatz). */
 export function summary(db) {
-  const byPhase = db.prepare(`
-    SELECT t.projectId, t.phaseId, SUM(t.hours) AS hours, SUM(t.hours * COALESCE(e.hourlyRate, 0)) AS cost
-    FROM timeEntries t LEFT JOIN employees e ON e.id = t.employeeId
-    GROUP BY t.projectId, t.phaseId`).all();
-  const byEmployee = db.prepare(`
-    SELECT t.projectId, t.employeeId, SUM(t.hours) AS hours, SUM(t.hours * COALESCE(e.hourlyRate, 0)) AS cost
-    FROM timeEntries t LEFT JOIN employees e ON e.id = t.employeeId
-    GROUP BY t.projectId, t.employeeId`).all();
-  const byTask = db.prepare(`
-    SELECT taskId, SUM(hours) AS hours FROM timeEntries WHERE taskId IS NOT NULL GROUP BY taskId`).all();
-  const plain = (rows) => rows.map((r) => ({ ...r }));
-  return { byPhase: plain(byPhase), byEmployee: plain(byEmployee), byTask: plain(byTask) };
+  const rate = new Map(list(db, 'employees').map((e) => [e.id, e.hourlyRate || 0]));
+  const group = (keyFn, fields) => {
+    const m = new Map();
+    for (const t of list(db, 'timeEntries')) {
+      const k = keyFn(t);
+      if (k === null) continue;
+      const g = m.get(k) || { ...fields(t), hours: 0, cost: 0 };
+      g.hours += t.hours || 0;
+      g.cost += (t.hours || 0) * (rate.get(t.employeeId) || 0);
+      m.set(k, g);
+    }
+    return [...m.values()];
+  };
+  return {
+    byPhase: group((t) => `${t.projectId}|${t.phaseId}`, (t) => ({ projectId: t.projectId, phaseId: t.phaseId })),
+    byEmployee: group((t) => `${t.projectId}|${t.employeeId}`, (t) => ({ projectId: t.projectId, employeeId: t.employeeId })),
+    byTask: group((t) => (t.taskId ? String(t.taskId) : null), (t) => ({ taskId: t.taskId })).map(({ taskId, hours }) => ({ taskId, hours })),
+  };
 }
 
 function validate(table, data, partial) {
@@ -54,31 +59,27 @@ function cascadeDelete(db, table, id) {
   return transaction(db, () => {
     switch (table) {
       case 'projects':
-        if (db.prepare("SELECT COUNT(*) AS n FROM invoices WHERE projectId = ? AND status <> 'entwurf'").get(id).n > 0) {
+        if (list(db, 'invoices', { projectId: id }).some((i) => i.status !== 'entwurf')) {
           throw new ApiError(409, 'Für dieses Projekt wurden bereits Rechnungen gestellt. Bitte den Status auf „Abgeschlossen“ setzen statt zu löschen.');
         }
-        db.prepare('DELETE FROM invoices WHERE projectId = ?').run(id);
-        for (const t of ['phases', 'milestones', 'tasks', 'allocations', 'timeEntries', 'costs', 'protocols']) {
-          db.prepare(`DELETE FROM "${t}" WHERE projectId = ?`).run(id);
+        for (const t of ['invoices', 'phases', 'milestones', 'tasks', 'allocations', 'timeEntries', 'costs', 'protocols']) {
+          removeWhere(db, t, (r) => r.projectId === id);
         }
         break;
       case 'phases':
-        for (const t of ['tasks', 'timeEntries', 'costs']) {
-          db.prepare(`UPDATE "${t}" SET phaseId = NULL WHERE phaseId = ?`).run(id);
-        }
+        for (const t of ['tasks', 'timeEntries', 'costs']) updateWhere(db, t, (r) => r.phaseId === id, { phaseId: null });
         break;
       case 'tasks':
-        db.prepare('UPDATE timeEntries SET taskId = NULL WHERE taskId = ?').run(id);
+        updateWhere(db, 'timeEntries', (r) => r.taskId === id, { taskId: null });
         break;
       case 'employees': {
-        const booked = db.prepare('SELECT COUNT(*) AS n FROM timeEntries WHERE employeeId = ?').get(id).n;
-        if (booked > 0) {
+        if (list(db, 'timeEntries', { employeeId: id }).length > 0) {
           throw new ApiError(409, 'Für diese Person existieren Zeitbuchungen. Bitte deaktivieren statt löschen.');
         }
-        db.prepare('UPDATE tasks SET assigneeId = NULL WHERE assigneeId = ?').run(id);
-        db.prepare('UPDATE projects SET leadId = NULL WHERE leadId = ?').run(id);
-        db.prepare('DELETE FROM allocations WHERE employeeId = ?').run(id);
-        db.prepare('DELETE FROM absences WHERE employeeId = ?').run(id);
+        updateWhere(db, 'tasks', (r) => r.assigneeId === id, { assigneeId: null });
+        updateWhere(db, 'projects', (r) => r.leadId === id, { leadId: null });
+        removeWhere(db, 'allocations', (r) => r.employeeId === id);
+        removeWhere(db, 'absences', (r) => r.employeeId === id);
         break;
       }
       default:
@@ -95,8 +96,7 @@ function setAllocation(db, body) {
   const hours = Number(body?.hours) || 0;
   validate('allocations', { employeeId, projectId, weekStart }, false);
   if (hours < 0 || hours > 80) throw new ApiError(400, 'Stunden müssen zwischen 0 und 80 liegen');
-  const existing = db.prepare('SELECT id FROM allocations WHERE employeeId = ? AND projectId = ? AND weekStart = ?')
-    .get(Number(employeeId), Number(projectId), weekStart);
+  const existing = list(db, 'allocations', { employeeId: Number(employeeId), projectId: Number(projectId), weekStart })[0];
   if (hours === 0) {
     if (existing) remove(db, 'allocations', existing.id);
     return { deleted: existing ? existing.id : null };
@@ -113,8 +113,9 @@ function setTimeEntry(db, body) {
   validate('timeEntries', { employeeId, projectId, date, hours: hours || 1 }, false);
   if (hours < 0 || hours > 24) throw new ApiError(400, 'Stunden müssen zwischen 0 und 24 liegen');
   return transaction(db, () => {
-    const rows = db.prepare(`SELECT id FROM timeEntries WHERE employeeId = ? AND projectId = ? AND date = ?
-      AND (phaseId IS ? ) ORDER BY id`).all(Number(employeeId), Number(projectId), date, phaseId === null ? null : Number(phaseId));
+    const pid = phaseId === null || phaseId === undefined || phaseId === '' ? null : Number(phaseId);
+    const rows = list(db, 'timeEntries', { employeeId: Number(employeeId), projectId: Number(projectId), date })
+      .filter((r) => (r.phaseId ?? null) === pid);
     for (const r of rows.slice(1)) remove(db, 'timeEntries', r.id);
     if (hours === 0) {
       if (rows[0]) remove(db, 'timeEntries', rows[0].id);
@@ -126,14 +127,13 @@ function setTimeEntry(db, body) {
 }
 
 function queryTimeEntries(db, q) {
-  const where = [];
-  const params = [];
-  if (q.employeeId) { where.push('employeeId = ?'); params.push(Number(q.employeeId)); }
-  if (q.projectId) { where.push('projectId = ?'); params.push(Number(q.projectId)); }
-  if (q.from) { where.push('date >= ?'); params.push(q.from); }
-  if (q.to) { where.push('date <= ?'); params.push(q.to); }
-  const sql = `SELECT * FROM timeEntries${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY date, id LIMIT 5000`;
-  return db.prepare(sql).all(...params).map((r) => ({ ...r }));
+  const where = {};
+  if (q.employeeId) where.employeeId = Number(q.employeeId);
+  if (q.projectId) where.projectId = Number(q.projectId);
+  return list(db, 'timeEntries', where)
+    .filter((r) => (!q.from || r.date >= q.from) && (!q.to || r.date <= q.to))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)
+    .slice(0, 5000);
 }
 
 /**
@@ -217,7 +217,7 @@ export function handle(db, method, pathname, query, body, user = ANONYMOUS_ADMIN
       if (table === 'employees' && data.active === undefined) data.active = true;
       if (table === 'protocols') {
         // fortlaufende Protokollnummer je Projekt
-        if (!data.number) data.number = (db.prepare('SELECT MAX(number) AS n FROM protocols WHERE projectId = ?').get(Number(data.projectId)).n || 0) + 1;
+        if (!data.number) data.number = Math.max(0, ...list(db, 'protocols', { projectId: Number(data.projectId) }).map((p) => p.number || 0)) + 1;
         if (!data.status) data.status = 'entwurf';
         if (!data.createdAt) data.createdAt = new Date().toISOString().slice(0, 10);
       }

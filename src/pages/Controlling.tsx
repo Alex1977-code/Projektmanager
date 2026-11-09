@@ -2,6 +2,8 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowDown, ArrowUp, Download } from 'lucide-react';
 import { useStore } from '../store';
+import { useToast } from '../components/Toast';
+import { saveFile } from '../utils/files';
 import { AmpelBadge, Avatar, Card, Kpi, PageHeader, Segmented } from '../components/ui';
 import { BulletBar, BulletLegend } from '../components/Charts';
 import { projectMetrics, type ProjectMetrics } from '../utils/metrics';
@@ -13,6 +15,7 @@ type SortKey = 'number' | 'budget' | 'actualCost' | 'budgetUsed' | 'progress' | 
 
 export function Controlling() {
   const { data, idx } = useStore();
+  const toast = useToast();
   const navigate = useNavigate();
   const [scope, setScope] = useState<'laufend' | 'alle'>('laufend');
   const [sortKey, setSortKey] = useState<SortKey>('variance');
@@ -61,11 +64,7 @@ export function Controlling() {
       n(m.progress * 100), n(m.earnedValue), n(m.cpi), n(m.eac), n(m.variance),
     ].map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';'));
     const blob = new Blob(['﻿' + [header.join(';'), ...lines].join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `controlling-${today}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    saveFile(`controlling-${today}.csv`, blob).catch((e) => toast.error((e as Error).message));
   };
 
   return (

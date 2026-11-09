@@ -24,6 +24,7 @@ const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.woff': 'font/woff',
+  '.webmanifest': 'application/manifest+json',
 };
 
 function sendJson(res, status, data) {
@@ -68,6 +69,23 @@ function serveStatic(req, res, pathname) {
 }
 
 const clientIp = (req) => req.socket.remoteAddress || '';
+
+// ------------------------------------------------------------------ Live-Aktualisierung (Server-Sent Events)
+// Nach jeder Änderung erhalten alle offenen Fenster (PC, Handy, Tablet) ein Signal und laden neu.
+const listeners = new Set();
+let dataVersion = 0;
+function broadcast(by) {
+  dataVersion++;
+  const msg = `data: ${JSON.stringify({ v: dataVersion, by })}\n\n`;
+  for (const res of listeners) res.write(msg);
+}
+setInterval(() => { for (const res of listeners) res.write(': ping\n\n'); }, 25000).unref();
+function openEvents(req, res) {
+  res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  res.write(`retry: 3000\ndata: ${JSON.stringify({ v: dataVersion, by: 'server' })}\n\n`);
+  listeners.add(res);
+  req.on('close', () => listeners.delete(res));
+}
 
 /** Angemeldeten Benutzer ermitteln: Sitzungs-Cookie, sonst (Modus header) Windows-Anmeldung des Proxys. */
 function resolveUser(req) {
@@ -131,6 +149,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/auth/')) return await handleAuth(req, res, url.pathname.slice('/api/auth/'.length));
     const user = url.pathname === '/api/health' ? auth.ANONYMOUS_ADMIN : resolveUser(req);
     if (!user) return sendJson(res, 401, { error: 'Bitte melden Sie sich an.', login: true });
+    if (url.pathname === '/api/events' && req.method === 'GET') return openEvents(req, res);
     const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readBody(req) : undefined;
     const query = Object.fromEntries(url.searchParams);
     const result = await handle(db, req.method, url.pathname, query, body, user);
@@ -138,6 +157,7 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename="projektmanager-export-${new Date().toISOString().slice(0, 10)}.json"`);
     }
     sendJson(res, req.method === 'POST' ? 201 : 200, result);
+    if (write) broadcast(String(req.headers['x-client-id'] || ''));
   } catch (err) {
     const status = err instanceof ApiError || err instanceof auth.AuthError ? err.status : 500;
     if (status === 500) console.error(err);
