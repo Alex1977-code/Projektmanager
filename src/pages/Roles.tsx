@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react';
-import { Lock, Plus, Trash2 } from 'lucide-react';
+import { Eye, Lock, Plus, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { useToast } from '../components/Toast';
 import { Modal, useConfirm } from '../components/Modal';
@@ -9,7 +10,8 @@ import type { RoleDef } from '../types';
 import { classNames } from '../utils/format';
 
 export function Roles() {
-  const { data, can, update, remove, create, authMode } = useStore();
+  const { data, can, update, remove, create, authMode, setPreviewRole } = useStore();
+  const navigate = useNavigate();
   const toast = useToast();
   const confirm = useConfirm();
   const [adding, setAdding] = useState(false);
@@ -36,7 +38,7 @@ export function Roles() {
         actions={<button className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={16} /> Neue Rolle</button>} />
 
       {authMode === 'none' && (
-        <p className="tpl-hint">Hinweis: Ohne Anmeldung (Demo / veröffentlichte Version) gelten für alle Personen alle Rechte. Die Rollen wirken, sobald die Anmeldung über Active Directory oder Windows aktiv ist.</p>
+        <p className="tpl-hint">Hinweis: Ohne Anmeldung (Demo / veröffentlichte Version) gelten für alle Personen alle Rechte. Die Rollen wirken, sobald die Anmeldung über Active Directory oder Windows aktiv ist. Mit „Ansicht testen“ an einer Rolle sehen Sie schon jetzt, was diese Rolle zu sehen bekommt.</p>
       )}
 
       <Card padded={false} title="Rechte-Matrix" subtitle="Ohne besonderes Recht darf jede Person: Projekte, Termine und Aufgaben ansehen, eigene Projektzeiten und Arbeitszeiten erfassen, eigene Abwesenheiten beantragen.">
@@ -92,6 +94,7 @@ export function Roles() {
             <footer>
               <span className="muted small">Schlüssel: <code>{r.key}</code></span>
               <span className="spacer" />
+              {r.key !== 'admin' && <button className="btn btn-sm btn-ghost" onClick={() => { setPreviewRole(r.key); navigate('/'); }} title="Oberfläche so anzeigen, wie diese Rolle sie sieht"><Eye size={14} /> Ansicht testen</button>}
               {!r.system && <button className="icon-btn danger" onClick={() => del(r)} aria-label="Rolle löschen"><Trash2 size={15} /></button>}
             </footer>
           </article>

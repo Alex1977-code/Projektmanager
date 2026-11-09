@@ -1110,3 +1110,69 @@ kbd { font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid
   .invoice-print .pre { white-space: pre-wrap; }
   .ip-footer { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6mm; margin-top: 14mm; border-top: 1px solid #999; padding-top: 3mm; font-size: 8pt; color: #333; }
 }
+
+/* ---------------------------------------------------------- Stempeluhr, Cockpit „Heute“ */
+.stamp-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.stamp-elapsed { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--good-bg); color: var(--good); font-size: 13px; font-variant-numeric: tabular-nums; }
+.stamp-card.compact { height: 100%; }
+.today-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.today-grid.single { grid-template-columns: minmax(0, 1fr); }
+.todo-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); display: flex; flex-direction: column; overflow: hidden; }
+.todo-card > h3 { margin: 0; padding: 10px 16px 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+.todo-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; color: var(--text); text-decoration: none; border-top: 1px solid var(--border); font-size: 13.5px; }
+.todo-item:first-of-type { border-top: 0; }
+.todo-item:hover { background: var(--surface-2); }
+.todo-item .todo-dot { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex: none; background: var(--warn-bg); color: var(--warn); }
+.todo-item.bad .todo-dot { background: var(--bad-bg); color: var(--bad); }
+.todo-item.info .todo-dot { background: var(--primary-soft); color: var(--primary); }
+.todo-item > span { flex: 1; min-width: 0; }
+.todo-item small { display: block; color: var(--muted); font-size: 12px; }
+.todo-item > svg:last-child { color: var(--faint); flex: none; }
+
+/* fehlende Tage in der Monatsliste */
+.wt tr.missing td.wt-day { box-shadow: inset 3px 0 0 var(--warn); }
+
+/* Rollen-Vorschau */
+.preview-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 20px; background: #fff4d6; color: #7a4b00; border-bottom: 1px solid #f0d48a; font-size: 13px; }
+.preview-bar strong { font-weight: 600; }
+.preview-bar .btn { margin-left: auto; }
+.role-preview { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+
+/* Abgleich Projektzeit ↔ Arbeitszeit */
+.ts-compare td { background: var(--surface-2); font-size: 12.5px; color: var(--muted); }
+.ts-compare .ts-gap { color: var(--warn); font-weight: 600; }
+.ts-compare .ts-over { color: var(--bad); font-weight: 600; }
+.ts-compare .ts-ok { color: var(--good); }
+
+@media (max-width: 860px) {
+  .today-grid { grid-template-columns: minmax(0, 1fr); }
+}
+/* Handy: Monatsliste als Karten je Tag – ohne seitliches Scrollen */
+@media (max-width: 640px) {
+  .stamp-card { padding: 12px 14px; gap: 10px; }
+  .stamp-info { min-width: 100%; }
+  .stamp-actions { width: 100%; flex-wrap: nowrap; }
+  .stamp-actions .select-sm { flex: 1; min-width: 0; height: 46px; }
+  .stamp-actions .stamp-btn { flex: 1.3; min-width: 0; padding: 0 12px; }
+  .wt, .wt tbody, .wt tfoot { display: block; }
+  .wt thead { display: none; }
+  .wt tr { display: grid; grid-template-columns: 70px minmax(0, 1fr) minmax(0, 1fr) 56px; gap: 4px 8px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--border); }
+  .wt tr.we, .wt tr.hol { background: #f6f7fa; }
+  .wt tr.today { background: #f3f7ff; }
+  .wt td, .wt tr.we td, .wt tr.hol td, .wt tr.today td, .wt tfoot td { padding: 0; border: 0; background: transparent; }
+  .wt td:empty, .wt td.wt-soll, .wt td.wt-proj { display: none; }
+  .wt .wt-input { width: 100%; height: 36px; font-size: 15px; }
+  .wt .wt-break { width: 100%; }
+  .wt td.wt-loc { grid-column: 1 / 3; }
+  .wt .wt-select { max-width: 100%; height: 32px; }
+  .wt td.wt-net, .wt td.wt-saldo { text-align: left; font-size: 13px; white-space: nowrap; }
+  .wt td.wt-net::before, .wt td.wt-saldo::before { content: attr(data-label) ' '; color: var(--muted); font-size: 11px; font-weight: 400; }
+  .wt td.wt-hintcell { grid-column: 1 / -1; }
+  .wt .wt-hint { min-width: 0; }
+  .wt tr.no-entry.we, .wt tr.no-entry.hol { padding-top: 3px; padding-bottom: 3px; opacity: 0.75; }
+  .wt tr.no-entry.we .wt-input, .wt tr.no-entry.hol .wt-input { height: 28px; font-size: 13px; }
+  .wt tr.missing td.wt-day { box-shadow: none; color: var(--warn); }
+  .wt tfoot tr { background: var(--surface-2); grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px 14px; padding: 10px 12px; }
+  .wt tfoot td.wt-sumlabel { grid-column: auto; }
+  .preview-bar { padding: 8px 14px; }
+}

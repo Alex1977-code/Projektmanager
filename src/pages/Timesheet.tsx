@@ -4,7 +4,9 @@ import { useStore } from '../store';
 import { api } from '../api';
 import { useToast } from '../components/Toast';
 import { Avatar, Card, PageHeader, ProgressBar } from '../components/ui';
-import type { ID, TimeEntry } from '../types';
+import type { ID, TimeEntry, Worktime } from '../types';
+import { netMinutes } from '../../shared/worktime.js';
+import { Link } from 'react-router-dom';
 import { addDays, fmtDate, fmtDateShort, isoWeek, startOfWeek, todayISO, weekdayShort } from '../utils/date';
 import { classNames, fmtNum, sum } from '../utils/format';
 import { dayOff } from '../utils/capacity';
@@ -43,6 +45,7 @@ export function Timesheet() {
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [extra, setExtra] = useState<Row[]>([]);
+  const [worktimes, setWorktimes] = useState<Worktime[]>([]);
   const [addProject, setAddProject] = useState('');
   const refreshTimer = useRef<number | undefined>(undefined);
 
@@ -55,6 +58,8 @@ export function Timesheet() {
     setLoading(true);
     try {
       setEntries(await api.get<TimeEntry[]>(`/api/timeEntries?employeeId=${empId}&from=${week}&to=${addDays(week, 6)}`));
+      // Arbeitszeit (Kommen/Gehen) der Woche zum Abgleich – fehlt sie, bleibt der Abgleich einfach aus
+      api.get<Worktime[]>(`/api/worktimes?employeeId=${empId}`).then((w) => setWorktimes(w.filter((x) => x.date >= week && x.date <= addDays(week, 6)))).catch(() => setWorktimes([]));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -105,6 +110,10 @@ export function Timesheet() {
 
   const dayTotals = days.map((d) => sum(entries.filter((e) => e.date === d), (e) => e.hours));
   const weekTotal = sum(dayTotals, (h) => h);
+  // gestempelte Arbeitszeit je Tag in Stunden (nur abgeschlossene Tage)
+  const workDay = days.map((d) => { const w = worktimes.find((x) => x.date === d && x.end); return w ? netMinutes(w) / 60 : null; });
+  const workTotal = sum(workDay, (h) => h || 0);
+  const bookedOnWorkDays = dayTotals.reduce((s, h, i) => s + (workDay[i] !== null ? h : 0), 0);
   const perDay = (employee?.weeklyHours || 40) / 5;
   const offs = days.map((d, i) => (i < 5 && employee ? dayOff(idx.cap, employee.id, d) : null));
   const target = sum(offs.slice(0, 5), (o) => perDay * (1 - (o?.fraction || 0)));
@@ -112,7 +121,7 @@ export function Timesheet() {
 
   return (
     <div className="page">
-      <PageHeader title="Zeiterfassung" subtitle="Stunden je Projekt und Leistungsphase erfassen – Grundlage für Ist-Kosten und Controlling">
+      <PageHeader title="Projektzeiten" subtitle="Stunden je Projekt und Leistungsphase erfassen – Grundlage für Ist-Kosten, Controlling und die Übergabe an Abacus">
         <div className="toolbar">
           <label className="person-select">
             <Avatar employee={employee} size={26} />
@@ -222,6 +231,26 @@ export function Timesheet() {
                 ))}
                 <td className="ts-sum"><strong>{fmtNum(weekTotal, 2)}</strong></td>
               </tr>
+              {workDay.some((h) => h !== null) && (
+                <>
+                  <tr className="ts-compare">
+                    <td className="ts-proj"><Link to="/arbeitszeit">Arbeitszeit (Kommen/Gehen)</Link></td>
+                    <td className="ts-plan" />
+                    {workDay.map((h, i) => <td key={days[i]} className="ts-day-total">{h !== null ? fmtNum(h, 2) : '–'}</td>)}
+                    <td className="ts-sum">{fmtNum(workTotal, 2)}</td>
+                  </tr>
+                  <tr className="ts-compare">
+                    <td className="ts-proj" title="Arbeitszeit, die noch keinem Projekt zugeordnet ist">noch nicht verbucht</td>
+                    <td className="ts-plan" />
+                    {workDay.map((h, i) => {
+                      const gap = h === null ? null : Math.round((h - dayTotals[i]) * 100) / 100;
+                      return <td key={days[i]} className={classNames('ts-day-total', gap !== null && gap > 0.25 && 'ts-gap', gap !== null && gap < -0.25 && 'ts-over', gap !== null && Math.abs(gap) <= 0.25 && 'ts-ok')}
+                        title={gap !== null && gap < -0.25 ? 'Mehr Projektstunden gebucht als gearbeitet' : undefined}>{gap === null ? '–' : Math.abs(gap) <= 0.25 ? '✓' : fmtNum(gap, 2)}</td>;
+                    })}
+                    <td className={classNames('ts-sum', workTotal - bookedOnWorkDays > 0.25 && 'ts-gap')}>{fmtNum(Math.max(0, workTotal - bookedOnWorkDays), 2)}</td>
+                  </tr>
+                </>
+              )}
             </tfoot>
           </table>
         </div>

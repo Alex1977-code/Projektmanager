@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Briefcase, CalendarClock, Check, Flag, Gauge, Wallet } from 'lucide-react';
+import { AlertTriangle, Briefcase, CalendarClock, Check, ChevronRight, ClipboardCheck, Clock, Flag, Gauge, Palmtree as PalmIcon, Receipt, Send, Wallet } from 'lucide-react';
 import { useStore } from '../store';
 import { AmpelBadge, Avatar, Card, EmptyState, Kpi, PageHeader, PriorityTag, ProgressBar } from '../components/ui';
 import { BulletBar, UtilizationChart } from '../components/Charts';
@@ -12,6 +12,9 @@ import { classNames, fmtEurCompact, fmtNum, fmtPct, sum } from '../utils/format'
 import type { Task } from '../types';
 import { sortTasks } from '../components/Kanban';
 import { dayOff, weekCapacity } from '../utils/capacity';
+import { StampCard, useOwnWorktimes } from '../components/StampCard';
+import { monthRows } from '../utils/worktimeCalc';
+import { addMonths, monthLong } from '../utils/date';
 
 export function Dashboard() {
   const { data, idx, me, update, can } = useStore();
@@ -57,6 +60,40 @@ export function Dashboard() {
     return out.sort((a, b) => Math.max(...b.weeks.map((x) => x.u)) - Math.max(...a.weeks.map((x) => x.u)));
   }, [data.allocations, data.employees, weeks, idx.cap]);
 
+  // ---- Heute: Stempeluhr und offene Vorgänge
+  const own = useOwnWorktimes(me?.id);
+  const todos = useMemo(() => {
+    const out: { key: string; tone: 'warn' | 'bad' | 'info'; icon: 'send' | 'clock' | 'check' | 'palm' | 'receipt'; text: string; sub?: string; to: string }[] = [];
+    const month = today.slice(0, 7);
+    const prev = addMonths(`${month}-01`, -1).slice(0, 7);
+    const statusOf = (empId: number, m: string) => data.worktimeMonths.find((x) => x.employeeId === empId && x.month === m)?.status || 'offen';
+    if (me && own.list?.length) {
+      if (own.list.some((w) => w.date.startsWith(prev)) && statusOf(me.id, prev) === 'offen') {
+        out.push({ key: 'submit', tone: 'warn', icon: 'send', text: `Arbeitszeit ${monthLong(`${prev}-01`)} einreichen`, sub: 'Monatsabschluss steht noch aus', to: `/arbeitszeit?monat=${prev}` });
+      }
+      const gaps = statusOf(me.id, month) === 'offen' ? monthRows(me, month, own.list, idx.cap, today, new Map()).filter((r) => r.missing).length : 0;
+      if (gaps) out.push({ key: 'gaps', tone: 'warn', icon: 'clock', text: `${gaps} Arbeitstag${gaps > 1 ? 'e' : ''} ohne Zeiteintrag`, sub: `${monthLong(`${month}-01`)} – Zeit oder Abwesenheit nachtragen`, to: '/arbeitszeit' });
+    }
+    if (can('worktime.approve')) {
+      const n = data.worktimeMonths.filter((m) => m.status === 'eingereicht' && m.employeeId !== me?.id);
+      if (n.length) {
+        const latest = n.map((m) => m.month).sort().pop()!;
+        out.push({ key: 'approve', tone: 'info', icon: 'check', text: `${n.length} Monatsabschl${n.length > 1 ? 'üsse' : 'uss'} zur Freigabe`, sub: 'Arbeitszeiten prüfen und freigeben', to: `/arbeitszeit?tab=freigaben&monat=${latest}` });
+      }
+    }
+    if (can('absences.approve')) {
+      const n = data.absences.filter((a) => a.status === 'beantragt').length;
+      if (n) out.push({ key: 'abs', tone: 'info', icon: 'palm', text: `${n} Abwesenheitsantr${n > 1 ? 'äge' : 'ag'} offen`, sub: 'Urlaub genehmigen oder ablehnen', to: '/abwesenheiten' });
+    }
+    if (can('invoices.view')) {
+      const n = (data.invoices || []).filter((i) => i.status === 'gestellt' && i.dueDate && i.dueDate < today).length;
+      if (n) out.push({ key: 'inv', tone: 'bad', icon: 'receipt', text: `${n} Rechnung${n > 1 ? 'en' : ''} überfällig`, sub: 'Zahlungseingang prüfen', to: '/rechnungen' });
+    }
+    return out;
+  }, [data.worktimeMonths, data.absences, data.invoices, me, own.list, idx.cap, today, can]);
+  const todoIcon = { send: <Send size={14} />, clock: <Clock size={14} />, check: <ClipboardCheck size={14} />, palm: <PalmIcon size={14} />, receipt: <Receipt size={14} /> };
+  const monthLocked = me ? (data.worktimeMonths.find((x) => x.employeeId === me.id && x.month === today.slice(0, 7))?.status || 'offen') !== 'offen' : false;
+
   const hour = new Date().getHours();
   const greet = hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
   const projectsSorted = [...active].sort((a, b) => {
@@ -71,6 +108,24 @@ export function Dashboard() {
         title={`${greet}${me ? ', ' + me.name.split(' ')[0] : ''}`}
         subtitle={`${weekdayShort(today)}, ${fmtDate(today)} · KW ${isoWeek(today)} · Überblick über alle laufenden Projekte`}
       />
+
+      {(me || todos.length > 0) && (
+        <div className={classNames('today-grid', (!me || !todos.length) && 'single')}>
+          {me && <StampCard compact employee={me} wt={own.list?.find((w) => w.date === today)} locked={monthLocked} onStamped={own.put} />}
+          {todos.length > 0 && (
+            <section className="todo-card" aria-label="Zu erledigen">
+              <h3>Zu erledigen</h3>
+              {todos.map((t) => (
+                <Link key={t.key} to={t.to} className={classNames('todo-item', t.tone)}>
+                  <i className="todo-dot">{todoIcon[t.icon]}</i>
+                  <span>{t.text}{t.sub && <small>{t.sub}</small>}</span>
+                  <ChevronRight size={16} />
+                </Link>
+              ))}
+            </section>
+          )}
+        </div>
+      )}
 
       <div className="kpi-grid">
         <Kpi label="Laufende Projekte" icon={<Briefcase size={18} />} value={active.length}

@@ -15,12 +15,17 @@ export interface DayRow {
   off: DayOff | null;
   checks: { level: 'bad' | 'warn' | 'info'; text: string }[];
   projectHours: number;
+  /** vergangener Arbeitstag ohne Eintrag und ohne ganztägige Abwesenheit */
+  missing: boolean;
 }
+
+/** Erster erfasster Tag ('' = noch nichts erfasst). */
+export const firstDate = (worktimes: Worktime[]) => worktimes.reduce((min, w) => (!min || w.date < min ? w.date : min), '');
 
 /** Soll-Minuten je Arbeitstag (5-Tage-Woche). */
 export const dailySoll = (e: Employee) => ((e.weeklyHours || 0) * 60) / 5;
 
-export function dayRow(e: Employee, date: string, byDate: Map<string, Worktime>, cap: CapacityIndex, today: string, projectHours = 0): DayRow {
+export function dayRow(e: Employee, date: string, byDate: Map<string, Worktime>, cap: CapacityIndex, today: string, projectHours = 0, since = ''): DayRow {
   const weekend = dayOfWeek(date) >= 5;
   const wt = byDate.get(date);
   const off = weekend ? null : dayOff(cap, e.id, date);
@@ -30,13 +35,16 @@ export function dayRow(e: Employee, date: string, byDate: Map<string, Worktime>,
   const prevWt = byDate.get(addDays(date, -1));
   const checks = wt ? checkDay({ ...wt, date }, prevWt ? { ...prevWt, date: addDays(date, -1) } : null, { holiday: off?.kind === 'holiday' ? off.label : null }) : [];
   const past = date < today || (date === today && !!wt?.end); // laufender Tag zählt erst nach „Gehen“
-  return { date, weekend, wt, net, soll, credit, saldo: past ? net + credit - soll : null, off, checks, projectHours };
+  // „fehlt“ erst ab dem ersten erfassten Tag der Person – davor gab es keine Erfassung
+  const missing = !!since && date >= since && date < today && soll > 0 && !wt && !(off && off.fraction >= 1 && !off.pending);
+  return { date, weekend, wt, net, soll, credit, saldo: past ? net + credit - soll : null, off, checks, projectHours, missing };
 }
 
 export function monthRows(e: Employee, month: string, worktimes: Worktime[], cap: CapacityIndex, today: string, projectByDate: Map<string, number>) {
   const byDate = new Map(worktimes.map((w) => [w.date, w]));
+  const since = firstDate(worktimes);
   const rows: DayRow[] = [];
-  for (let d = `${month}-01`; d <= endOfMonth(`${month}-01`); d = addDays(d, 1)) rows.push(dayRow(e, d, byDate, cap, today, projectByDate.get(d) || 0));
+  for (let d = `${month}-01`; d <= endOfMonth(`${month}-01`); d = addDays(d, 1)) rows.push(dayRow(e, d, byDate, cap, today, projectByDate.get(d) || 0, since));
   return rows;
 }
 

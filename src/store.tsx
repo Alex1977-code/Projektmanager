@@ -6,6 +6,7 @@ import { useToast } from './components/Toast';
 import { useAuth } from './auth';
 import { CLIENT_ID, IS_HOSTED } from './hosted';
 import type { Role, SessionUser } from './types';
+import { permissionsFor } from '../shared/permissions.js';
 
 interface Store {
   data: Data;
@@ -18,6 +19,9 @@ interface Store {
   role: Role;
   /** Hat der angemeldete Benutzer dieses Recht? (siehe shared/permissions.js) */
   can: (permission: string) => boolean;
+  /** Rollen-Vorschau: Oberfläche so zeigen, wie die Rolle sie sieht (null = aus). */
+  previewRole: string | null;
+  setPreviewRole: (key: string | null) => void;
   isLead: boolean;
   isAdmin: boolean;
   logout: () => Promise<void>;
@@ -50,6 +54,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [meId, setMeIdState] = useState<ID | null>(readMe);
+  const [previewRole, setPreviewRole] = useState<string | null>(null);
   const dataRef = useRef<Data | null>(null);
   dataRef.current = data;
 
@@ -217,11 +222,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  const perms = new Set(data.me?.permissions || []);
+  const real = new Set(data.me?.permissions || []);
+  // Vorschau kann Rechte nur einschränken, nie erweitern – und nur, wer Rollen verwalten darf
+  const preview = previewRole && real.has('roles.edit') && data.roles.some((r) => r.key === previewRole) ? previewRole : null;
+  const perms = preview ? new Set(permissionsFor(preview, data.roles).filter((p) => real.has(p))) : real;
   const can = (p: string) => perms.has(p);
   const role: Role = auth.mode === 'none' ? 'admin' : auth.user?.role || 'mitarbeiter';
   const value: Store = {
-    session: auth.user, authMode: auth.mode, role, can, isLead: can('projects.edit'), isAdmin: can('settings.edit'), logout: auth.logout,
+    session: auth.user, authMode: auth.mode, role, can, previewRole: preview, setPreviewRole, isLead: can('projects.edit'), isAdmin: can('settings.edit'), logout: auth.logout,
     data, idx, me, setMeId, create, update, remove, setAllocation, createTasks, refreshSummary, reload, saveSettings };
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

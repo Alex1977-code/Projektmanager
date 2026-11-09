@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, CalendarRange, ChevronDown, Clock, CornerDownLeft, FolderKanban, LayoutDashboard,
   ListChecks, LogOut, Menu, ShieldCheck, Timer, NotebookPen, Palmtree, Plus, Receipt, Search, Settings, Users, Gauge, X,
+  Eye,
 } from 'lucide-react';
 import { useStore } from '../store';
 import { Avatar } from './ui';
@@ -31,7 +32,7 @@ const NAV = [
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { data, me, can } = useStore();
+  const { data, me, can, previewRole, setPreviewRole } = useStore();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [quick, setQuick] = useState<'task' | 'project' | null>(null);
@@ -110,6 +111,13 @@ export function Layout({ children }: { children: ReactNode }) {
             <UserMenu />
           </div>
         </header>
+        {previewRole && (
+          <div className="preview-bar" role="status">
+            <Eye size={16} />
+            <span>Vorschau: Sie sehen die Oberfläche wie die Rolle <strong>„{data.roles.find((r) => r.key === previewRole)?.name || previewRole}“</strong>.</span>
+            <button className="btn btn-sm" onClick={() => setPreviewRole(null)}>Vorschau beenden</button>
+          </div>
+        )}
         <main className="content">{children}</main>
       </div>
 

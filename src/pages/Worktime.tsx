@@ -1,27 +1,28 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
-import { AlertOctagon, AlertTriangle, Check, ChevronLeft, ChevronRight, Info, LogIn, LogOut, Send, Undo2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { AlertOctagon, AlertTriangle, Check, CheckCheck, ChevronLeft, ChevronRight, Info, Send, Undo2 } from 'lucide-react';
 import { useStore } from '../store';
 import { api } from '../api';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/Modal';
 import { Avatar, Card, EmptyState, Kpi, PageHeader } from '../components/ui';
 import { AbacusPanel } from '../components/AbacusPanel';
+import { LOCATIONS, StampCard } from '../components/StampCard';
 import type { Employee, ID, MonthStatus, TimeEntry, Worktime as WT } from '../types';
 import { addMonths, fmtDate, fmtDateShort, monthLong, todayISO, weekdayShort, endOfMonth } from '../utils/date';
 import { classNames, fmtNum, sum } from '../utils/format';
-import { dayRow, flexBalance, fmtMin, monthRows, type DayRow } from '../utils/worktimeCalc';
+import { flexBalance, fmtMin, monthRows, type DayRow } from '../utils/worktimeCalc';
 
-const LOCATIONS = ['Büro', 'Homeoffice', 'Baustelle', 'Dienstreise', 'Werk / Prüfung'];
 const STATUS_LABEL: Record<MonthStatus, string> = { offen: 'Offen', eingereicht: 'Eingereicht', freigegeben: 'Freigegeben' };
 const STATUS_TONE: Record<MonthStatus, string> = { offen: 'slate', eingereicht: 'amber', freigegeben: 'green' };
-const nowHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
 type Tab = 'meine' | 'freigaben' | 'abacus';
 
 export function Worktime() {
   const { can } = useStore();
-  const [tab, setTab] = useState<Tab>('meine');
-  const [month, setMonth] = useState(todayISO().slice(0, 7));
+  const [params, setParams] = useSearchParams();
+  const wanted = params.get('tab') as Tab | null;
+  const [month, setMonth] = useState(() => (/^\d{4}-\d{2}$/.test(params.get('monat') || '') ? params.get('monat')! : todayISO().slice(0, 7)));
   const [person, setPerson] = useState<ID | null>(null);
   // Übergabe an Abacus betrifft üblicherweise den abgeschlossenen Vormonat
   const [exportMonth, setExportMonth] = useState(() => addMonths(`${todayISO().slice(0, 7)}-01`, -1).slice(0, 7));
@@ -30,6 +31,8 @@ export function Worktime() {
     { id: 'freigaben', label: 'Freigaben', show: can('worktime.approve') || can('time.all') },
     { id: 'abacus', label: 'Abacus-Export', show: can('abacus.export') || can('settings.edit') },
   ];
+  const tab: Tab = tabs.find((t) => t.id === wanted && t.show)?.id || 'meine';
+  const setTab = (t: Tab) => setParams(t === 'meine' ? {} : { tab: t }, { replace: true });
   return (
     <div className="page">
       <PageHeader title="Arbeitszeit" subtitle="Arbeitszeiterfassung nach Arbeitszeitgesetz mit Monatsabschluss und Übergabe an Abacus">
@@ -73,7 +76,7 @@ function MyWorktime({ month, setMonth, person, setPerson }: { month: string; set
   const emp = empId ? idx.employeeById.get(empId) : undefined;
   const [worktimes, setWorktimes] = useState<WT[]>([]);
   const [entries, setEntries] = useState<TimeEntry[]>([]);
-  const [location, setLocation] = useState(() => { try { return localStorage.getItem('pm.location') || 'Büro'; } catch { return 'Büro'; } });
+  const location = (() => { try { return localStorage.getItem('pm.location') || 'Büro'; } catch { return 'Büro'; } })();
 
   const load = useCallback(async () => {
     if (!empId) return;
@@ -107,20 +110,13 @@ function MyWorktime({ month, setMonth, person, setPerson }: { month: string; set
       });
     } catch (e) { toast.error((e as Error).message); }
   };
-  const stamp = async (action: 'kommen' | 'gehen') => {
-    try {
-      const res = await api.post<WT>('/api/worktimes/stamp', { action, employeeId: emp.id, date: today, time: nowHM(), location });
-      try { localStorage.setItem('pm.location', location); } catch { /* ohne Speicher */ }
-      setWorktimes((list) => [...list.filter((w) => w.date !== today), res].sort((a, b) => a.date.localeCompare(b.date)));
-      toast.success(action === 'kommen' ? `Eingestempelt um ${res.end ? res.end : nowHM()} Uhr` : `Ausgestempelt – heute ${fmtMin(dayRow(emp, today, new Map([[today, res]]), idx.cap, today).net)} h`);
-    } catch (e) { toast.error((e as Error).message); }
-  };
   const monthAction = async (action: 'submit' | 'approve' | 'reject' | 'reopen') => {
     if (action === 'submit') {
       const bad = rows.filter((r) => r.checks.some((c) => c.level === 'bad')).length;
+      const gaps = rows.filter((r) => r.missing).length;
       const ok = await confirm({
         title: `${monthLong(`${month}-01`)} einreichen?`,
-        message: <>Die Arbeitszeiten werden zur Freigabe eingereicht und können danach nicht mehr geändert werden.{bad ? <><br /><br /><strong>{bad} Tag(e) mit Verstößen gegen das Arbeitszeitgesetz.</strong> Bitte prüfen und ggf. begründen.</> : null}</>,
+        message: <>Die Arbeitszeiten werden zur Freigabe eingereicht und können danach nicht mehr geändert werden.{gaps ? <><br /><br /><strong>{gaps} Arbeitstag(e) ohne Eintrag.</strong> Fehlt eine Zeit oder eine Abwesenheit (Urlaub, Krankheit, Gleitzeit)?</> : null}{bad ? <><br /><br /><strong>{bad} Tag(e) mit Verstößen gegen das Arbeitszeitgesetz.</strong> Bitte prüfen und ggf. begründen.</> : null}</>,
         confirmLabel: 'Einreichen',
       });
       if (!ok) return;
@@ -132,8 +128,8 @@ function MyWorktime({ month, setMonth, person, setPerson }: { month: string; set
     } catch (e) { toast.error((e as Error).message); }
   };
 
-  const todayRow = rows.find((r) => r.date === today);
-  const running = todayRow?.wt?.start && !todayRow.wt.end;
+  const todayWt = worktimes.find((w) => w.date === today);
+  const missing = rows.filter((r) => r.missing).length;
   const past = rows.filter((r) => r.saldo !== null);
   const ist = sum(past, (r) => r.net + r.credit);
   const soll = sum(past, (r) => r.soll);
@@ -157,19 +153,8 @@ function MyWorktime({ month, setMonth, person, setPerson }: { month: string; set
       </div>
 
       {own && month === today.slice(0, 7) && (
-        <div className={classNames('stamp-card', running && 'running')}>
-          <div className="stamp-info">
-            <span className="muted small">{weekdayShort(today)}, {fmtDate(today)}</span>
-            <strong>{running ? `Eingestempelt seit ${todayRow!.wt!.start} Uhr` : todayRow?.wt?.end ? `Heute ${todayRow.wt.start}–${todayRow.wt.end} · ${fmtMin(todayRow.net)} h` : 'Noch nicht eingestempelt'}</strong>
-            {todayRow?.off && <span className="muted small">{todayRow.off.label}</span>}
-          </div>
-          <select className="select-sm" value={location} onChange={(e) => setLocation(e.target.value)} aria-label="Arbeitsort">
-            {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
-          </select>
-          {running
-            ? <button className="btn btn-primary stamp-btn" onClick={() => stamp('gehen')} disabled={locked}><LogOut size={18} /> Gehen</button>
-            : <button className="btn btn-primary stamp-btn" onClick={() => stamp('kommen')} disabled={locked}><LogIn size={18} /> Kommen</button>}
-        </div>
+        <StampCard employee={emp} wt={todayWt} locked={locked}
+          onStamped={(res) => setWorktimes((list) => [...list.filter((w) => w.date !== today), res].sort((a, b) => a.date.localeCompare(b.date)))} />
       )}
 
       <div className="kpi-grid">
@@ -177,7 +162,8 @@ function MyWorktime({ month, setMonth, person, setPerson }: { month: string; set
         <Kpi label="Soll (bis heute)" value={`${fmtMin(soll)} h`} sub={`${fmtNum(emp.weeklyHours)} h/Woche`} />
         <Kpi label="Saldo Monat" value={`${fmtMin(ist - soll, true)} h`} tone={ist - soll < -600 ? 'warn' : 'default'} sub="Mehr- / Minderstunden" />
         <Kpi label="Gleitzeitkonto" value={`${fmtMin(flex, true)} h`} sub={`Stand ${fmtDate(endOfMonth(`${month}-01`) < today ? endOfMonth(`${month}-01`) : today)}`} />
-        <Kpi label="ArbZG-Verstöße" value={issues} tone={issues ? 'bad' : 'good'} icon={issues ? <AlertOctagon size={18} /> : undefined} sub={`Projektzeit ${fmtMin(projTotal)} h gebucht`} />
+        <Kpi label="Zu prüfen" value={issues + missing} tone={issues ? 'bad' : missing ? 'warn' : 'good'} icon={issues ? <AlertOctagon size={18} /> : undefined}
+          sub={issues + missing ? [missing && `${missing} Tag(e) ohne Eintrag`, issues && `${issues} ArbZG-Verst${issues > 1 ? 'öße' : 'oß'}`].filter(Boolean).join(' · ') : `alles vollständig · Projektzeit ${fmtMin(projTotal)} h`} />
       </div>
 
       <Card padded={false} title={<>Monat {monthLong(`${month}-01`)} <StatusBadge status={mstat} /></>}
@@ -203,12 +189,12 @@ function MyWorktime({ month, setMonth, person, setPerson }: { month: string; set
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={5}><strong>Summe {monthLong(`${month}-01`)}</strong></td>
-                <td className="num"><strong>{fmtMin(sum(rows, (r) => r.net))}</strong></td>
-                <td className="num">{fmtMin(sum(rows, (r) => r.soll))}</td>
-                <td className="num">{fmtMin(ist - soll, true)}</td>
+                <td colSpan={5} className="wt-sumlabel"><strong>Summe {monthLong(`${month}-01`)}</strong></td>
+                <td className="num wt-net" data-label="Arbeitszeit"><strong>{fmtMin(sum(rows, (r) => r.net))}</strong></td>
+                <td className="num wt-soll">{fmtMin(sum(rows, (r) => r.soll))}</td>
+                <td className="num wt-saldo" data-label="Saldo">{fmtMin(ist - soll, true)}</td>
                 <td className="num wt-proj">{fmtMin(projTotal)}</td>
-                <td />
+                <td className="wt-hintcell" />
               </tr>
             </tfoot>
           </table>
@@ -237,15 +223,17 @@ function TimeInput({ value, onCommit, disabled, label }: { value: string; onComm
 
 function DayLine({ r, today, locked, onSave }: { r: DayRow; today: string; locked: boolean; onSave: (date: string, patch: Partial<WT>) => void }) {
   const w = r.wt;
-  const worst = r.checks.find((c) => c.level === 'bad') || r.checks.find((c) => c.level === 'warn') || r.checks[0];
+  const checks = r.missing ? [{ level: 'warn' as const, text: 'Kein Eintrag – Zeit oder Abwesenheit nachtragen' }, ...r.checks] : r.checks;
+  const worst = checks.find((c) => c.level === 'bad') || checks.find((c) => c.level === 'warn') || checks[0];
   const Icon = worst?.level === 'bad' ? AlertOctagon : worst?.level === 'warn' ? AlertTriangle : Info;
+  const hasHint = !!(r.off || worst || w?.note);
   return (
-    <tr className={classNames(r.weekend && 'we', r.date === today && 'today', r.off?.kind === 'holiday' && 'hol')}>
-      <td className="nowrap"><strong>{weekdayShort(r.date)}</strong> {fmtDateShort(r.date)}</td>
+    <tr className={classNames(r.weekend && 'we', r.date === today && 'today', r.off?.kind === 'holiday' && 'hol', r.missing && 'missing', !w && 'no-entry')}>
+      <td className="nowrap wt-day"><strong>{weekdayShort(r.date)}</strong> {fmtDateShort(r.date)}</td>
       <td><TimeInput value={w?.start || ''} disabled={locked} label={`Beginn ${r.date}`} onCommit={(v) => onSave(r.date, { start: v })} /></td>
       <td><TimeInput value={w?.end || ''} disabled={locked} label={`Ende ${r.date}`} onCommit={(v) => onSave(r.date, { end: v })} /></td>
       <td>
-        <input className="wt-input wt-break" inputMode="numeric" disabled={locked || !w} defaultValue={w ? String(w.breakMin ?? 0) : ''} key={`${r.date}-${w?.breakMin}`} aria-label={`Pause ${r.date}`}
+        <input className="wt-input wt-break" inputMode="numeric" disabled={locked || !w} defaultValue={w ? String(w.breakMin ?? 0) : ''} key={`${r.date}-${w?.breakMin}`} aria-label={`Pause ${r.date}`} title="Pause in Minuten"
           onBlur={(e) => { const n = Number(e.target.value) || 0; if (w && n !== (w.breakMin ?? 0)) onSave(r.date, { breakMin: n }); }} />
       </td>
       <td className="wt-loc">
@@ -253,15 +241,17 @@ function DayLine({ r, today, locked, onSave }: { r: DayRow; today: string; locke
           {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
         </select> : null}
       </td>
-      <td className="num"><strong>{w?.end ? fmtMin(r.net) : ''}</strong></td>
-      <td className="num muted">{r.soll ? fmtMin(r.soll) : ''}</td>
-      <td className={classNames('num', r.saldo !== null && r.saldo < 0 && 'text-bad', r.saldo !== null && r.saldo > 0 && 'text-good')}>{r.saldo !== null && (r.soll || r.net) ? fmtMin(r.saldo, true) : ''}</td>
+      <td className="num wt-net" data-label="Arbeitszeit">{w?.end ? <strong>{fmtMin(r.net)}</strong> : null}</td>
+      <td className="num muted wt-soll">{r.soll ? fmtMin(r.soll) : ''}</td>
+      <td className={classNames('num wt-saldo', r.saldo !== null && r.saldo < 0 && 'text-bad', r.saldo !== null && r.saldo > 0 && 'text-good')} data-label="Saldo">{r.saldo !== null && (r.soll || r.net) ? fmtMin(r.saldo, true) : ''}</td>
       <td className="num wt-proj muted">{r.projectHours ? fmtNum(r.projectHours, 2) : ''}</td>
-      <td><div className="wt-hint">
-        {r.off && <span className={classNames('abs-chip', `abs-${r.off.kind}`)}>{r.off.kind === 'holiday' ? r.off.label : `${r.off.kind}${r.off.fraction < 1 ? ' ½' : ''}`}</span>}
-        {worst && <span className={classNames('wt-check', worst.level)} title={r.checks.map((c) => c.text).join('\n')}><Icon size={13} /> {worst.text}{r.checks.length > 1 ? ` (+${r.checks.length - 1})` : ''}</span>}
-        {w?.note && !worst && <span className="muted small">{w.note}</span>}
-      </div></td>
+      <td className="wt-hintcell">{hasHint && (
+        <div className="wt-hint">
+          {r.off && <span className={classNames('abs-chip', `abs-${r.off.kind}`)}>{r.off.kind === 'holiday' ? r.off.label : `${r.off.kind}${r.off.fraction < 1 ? ' ½' : ''}`}</span>}
+          {worst && <span className={classNames('wt-check', worst.level)} title={checks.map((c) => c.text).join('\n')}><Icon size={13} /> {worst.text}{checks.length > 1 ? ` (+${checks.length - 1})` : ''}</span>}
+          {w?.note && !worst && <span className="muted small">{w.note}</span>}
+        </div>
+      )}</td>
     </tr>
   );
 }
@@ -270,6 +260,7 @@ function DayLine({ r, today, locked, onSave }: { r: DayRow; today: string; locke
 function Approvals({ month, setMonth, onOpen }: { month: string; setMonth: (m: string) => void; onOpen: (id: ID) => void }) {
   const { data, idx, can, me, reload } = useStore();
   const toast = useToast();
+  const confirm = useConfirm();
   const today = todayISO();
   const [all, setAll] = useState<WT[]>([]);
   const [entries, setEntries] = useState<TimeEntry[]>([]);
@@ -295,6 +286,7 @@ function Approvals({ month, setMonth, onOpen }: { month: string; setMonth: (m: s
     return {
       ist: sum(past, (r) => r.net + r.credit), soll: sum(past, (r) => r.soll),
       bad: rows.reduce((n, r) => n + r.checks.filter((c) => c.level === 'bad').length, 0),
+      missing: rows.filter((r) => r.missing).length,
       days: w.length, proj: sum(rows, (r) => r.projectHours) * 60, net: sum(rows, (r) => r.net),
       status: (data.worktimeMonths.find((m) => m.employeeId === e.id && m.month === month)?.status || 'offen') as MonthStatus,
       exported: !!data.worktimeMonths.find((m) => m.employeeId === e.id && m.month === month)?.exportedAt,
@@ -308,6 +300,23 @@ function Approvals({ month, setMonth, onOpen }: { month: string; setMonth: (m: s
     } catch (err) { toast.error((err as Error).message); }
   };
   const list = people.map((e) => ({ e, s: stats(e) }));
+  const approvable = list.filter((x) => x.s.status === 'eingereicht' && x.e.id !== me?.id);
+  const approveAll = async () => {
+    const clean = approvable.filter((x) => !x.s.bad && !x.s.missing);
+    const rest = approvable.length - clean.length;
+    if (!clean.length) return toast.error('Alle eingereichten Monate haben offene Punkte – bitte einzeln prüfen.');
+    if (!(await confirm({
+      title: `${clean.length} Monat(e) freigeben?`,
+      message: <>Freigegeben werden alle eingereichten Monate <strong>ohne ArbZG-Verstöße und ohne fehlende Tage</strong>.{rest ? <><br /><br />{rest} Monat(e) mit offenen Punkten bleiben zur Einzelprüfung stehen.</> : null}</>,
+      confirmLabel: 'Freigeben',
+    }))) return;
+    let done = 0;
+    for (const x of clean) {
+      try { await api.post('/api/worktimeMonths/action', { employeeId: x.e.id, month, action: 'approve' }); done++; } catch (err) { toast.error(`${x.e.name}: ${(err as Error).message}`); }
+    }
+    await reload();
+    if (done) toast.success(`${done} Monat(e) freigegeben`);
+  };
   const counts = { offen: list.filter((x) => x.s.status === 'offen').length, eingereicht: list.filter((x) => x.s.status === 'eingereicht').length, freigegeben: list.filter((x) => x.s.status === 'freigegeben').length };
 
   return (
@@ -319,10 +328,11 @@ function Approvals({ month, setMonth, onOpen }: { month: string; setMonth: (m: s
         <Kpi label="Noch offen" value={counts.offen} sub="nicht eingereicht" />
         <Kpi label="ArbZG-Verstöße" value={sum(list, (x) => x.s.bad)} tone={sum(list, (x) => x.s.bad) ? 'bad' : 'good'} sub={`in ${monthLong(`${month}-01`)}`} />
       </div>
-      <Card padded={false} title={`Monatsabschluss ${monthLong(`${month}-01`)} ${month.slice(0, 4)}`} subtitle="Freigegebene Monate sind gesperrt und können an Abacus übergeben werden.">
+      <Card padded={false} title={`Monatsabschluss ${monthLong(`${month}-01`)} ${month.slice(0, 4)}`} subtitle="Freigegebene Monate sind gesperrt und können an Abacus übergeben werden. Zeile anklicken, um die Tage zu prüfen."
+        actions={can('worktime.approve') && approvable.length > 0 ? <button className="btn btn-sm btn-primary" onClick={approveAll}><CheckCheck size={14} /> Alle unauffälligen freigeben ({approvable.filter((x) => !x.s.bad && !x.s.missing).length})</button> : undefined}>
         <div className="table-wrap">
           <table className="table table-hover">
-            <thead><tr><th>Person</th><th>Status</th><th className="num">Ist</th><th className="num">Soll</th><th className="num">Saldo</th><th className="num">Projektzeit</th><th className="num">nicht verbucht</th><th className="num">Verstöße</th><th /></tr></thead>
+            <thead><tr><th>Person</th><th>Status</th><th className="num">Ist</th><th className="num">Soll</th><th className="num">Saldo</th><th className="num">Projektzeit</th><th className="num">nicht verbucht</th><th className="num" title="Arbeitstage ohne Eintrag">Fehltage</th><th className="num">Verstöße</th><th /></tr></thead>
             <tbody>
               {list.map(({ e, s }) => (
                 <tr key={e.id} className="clickable" onClick={() => onOpen(e.id)}>
@@ -333,6 +343,7 @@ function Approvals({ month, setMonth, onOpen }: { month: string; setMonth: (m: s
                   <td className={classNames('num', s.ist - s.soll < 0 && 'text-bad')}>{fmtMin(s.ist - s.soll, true)}</td>
                   <td className="num">{fmtMin(s.proj)}</td>
                   <td className={classNames('num', s.net - s.proj > 600 && 'text-warn')} title="Arbeitszeit, die keinem Projekt zugeordnet ist">{fmtMin(Math.max(0, s.net - s.proj))}</td>
+                  <td className={classNames('num', s.missing > 0 && 'text-warn')}>{s.missing || '–'}</td>
                   <td className={classNames('num', s.bad > 0 && 'text-bad')}>{s.bad || '–'}</td>
                   <td onClick={(ev) => ev.stopPropagation()}>
                     <div className="row-actions">
